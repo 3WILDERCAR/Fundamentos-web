@@ -65,7 +65,6 @@ fun TrafficLightScreen() {
         }
     }
 
-    // Estructura visual (usando Scaffold para mantener tu estructura original)
     Scaffold { padding ->
         Column(
             modifier = Modifier
@@ -74,6 +73,16 @@ fun TrafficLightScreen() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
+
+            // -------------------------------
+            // TÍTULO CENTRADO
+            // -------------------------------
+            androidx.compose.material3.Text(
+                text = "Semáforo Galileo",
+                color = Color.Black,
+                style = MaterialTheme.typography.headlineMedium,
+                modifier = Modifier.padding(bottom = 24.dp)
+            )
 
             // Caja externa del semáforo (marco)
             Box(
@@ -98,6 +107,7 @@ fun TrafficLightScreen() {
         }
     }
 }
+
 
 // ---------------------------------------------------------------------
 // CÍRCULO INDIVIDUAL DEL SEMÁFORO
