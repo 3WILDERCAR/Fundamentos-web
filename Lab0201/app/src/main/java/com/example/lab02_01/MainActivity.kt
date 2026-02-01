@@ -45,9 +45,9 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DiceRollerScreen() {
-    var dice1 by remember { mutableIntStateOf(MIN_DICE_VALUE) }
-    var dice2 by remember { mutableIntStateOf(MIN_DICE_VALUE) }
-    var dice3 by remember { mutableIntStateOf(MIN_DICE_VALUE) }
+    var vit by remember { mutableIntStateOf(10) }
+    var dex by remember { mutableIntStateOf(10) }
+    var wis by remember { mutableIntStateOf(10) }
     var rolling1 by remember { mutableStateOf(false) }
     var rolling2 by remember { mutableStateOf(false) }
     var rolling3 by remember { mutableStateOf(false) }
@@ -64,31 +64,56 @@ fun DiceRollerScreen() {
             repeat(ANIMATION_ITERATIONS) {
                 val value = (MIN_DICE_VALUE..MAX_DICE_VALUE).random()
                 when (diceIndex) {
-                    1 -> dice1 = value
-                    2 -> dice2 = value
-                    3 -> dice3 = value
+                    1 -> vit = value
+                    2 -> dex = value
+                    3 -> wis = value
                 }
                 delay(ANIMATION_DELAY_MS)
             }
             val finalValue = (MIN_DICE_VALUE..MAX_DICE_VALUE).random()
             when (diceIndex) {
-                1 -> { dice1 = finalValue; rolling1 = false }
-                2 -> { dice2 = finalValue; rolling2 = false }
-                3 -> { dice3 = finalValue; rolling3 = false }
+                1 -> { vit = finalValue; rolling1 = false }
+                2 -> { dex = finalValue; rolling2 = false }
+                3 -> { wis = finalValue; rolling3 = false }
             }
         }
     }
+
+    val total = vit + dex + wis
+
+
+    // mensaje según el puntaje
+    val message: String
+    val color: Color
+    // color dependiendo del puntaje
+
+    when {
+        total < 30 -> {
+            message = "Re-roll recomendado!"
+            color = Color.Red
+        }
+        total >= 50 -> {
+            message = "Godlike!"
+            color = Color(0xFFFFD700) // dorado
+        }
+        else -> {
+            message = "Total: $total"
+            color = Color.Black
+        }
+    }
+
+
 
     Scaffold(
         topBar = {
             TopAppBar(title = {
                 Text(
-                    "RPG Dice Roller",
+                    "RPG Character Creator by Wilder Cardoza",
                     style = MaterialTheme.typography.titleLarge
                 )
             })
         }
-    ) { paddingValues ->
+    ){ paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -97,11 +122,21 @@ fun DiceRollerScreen() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            DiceRow(dice1, rolling1) { rollSingleDice(1) }
+            DiceRow(vit, rolling1) { rollSingleDice(1) }
             Spacer(modifier = Modifier.height(16.dp))
-            DiceRow(dice2, rolling2) { rollSingleDice(2) }
+            DiceRow(dex, rolling2) { rollSingleDice(2) }
             Spacer(modifier = Modifier.height(16.dp))
-            DiceRow(dice3, rolling3) { rollSingleDice(3) }
+            DiceRow(wis, rolling3) { rollSingleDice(3) }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Text(
+                text = message,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = color,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }
