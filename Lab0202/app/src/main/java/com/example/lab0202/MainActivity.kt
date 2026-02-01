@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -71,20 +70,31 @@ fun TrafficLightScreen() {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(vertical = 40.dp),
+                .padding(padding),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
 
-            // 3 círculos del semáforo
-            TrafficCircle(light = Light.Red, current = currentLight)
-            Spacer(modifier = Modifier.height(24.dp))
+            // Caja externa del semáforo (marco)
+            Box(
+                modifier = Modifier
+                    .width(180.dp)
+                    .height(420.dp)
+                    .background(Color(0xFF111111), shape = MaterialTheme.shapes.large)
+                    .padding(vertical = 28.dp),
+                contentAlignment = Alignment.Center
+            ) {
 
-            TrafficCircle(light = Light.Yellow, current = currentLight)
-            Spacer(modifier = Modifier.height(24.dp))
-
-            TrafficCircle(light = Light.Green, current = currentLight)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.SpaceEvenly,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    TrafficCircle(light = Light.Red, current = currentLight)
+                    TrafficCircle(light = Light.Yellow, current = currentLight)
+                    TrafficCircle(light = Light.Green, current = currentLight)
+                }
+            }
         }
     }
 }
