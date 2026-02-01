@@ -85,22 +85,22 @@ fun DiceRollerScreen() {
     // mensaje según el puntaje
     val message: String
     val color: Color
-    // color dependiendo del puntaje
 
     when {
         total < 30 -> {
-            message = "Re-roll recomendado!"
+            message = "Bad"
             color = Color.Red
         }
-        total >= 50 -> {
+        total == 50 -> {
             message = "Godlike!"
             color = Color(0xFFFFD700) // dorado
         }
         else -> {
-            message = "Total: $total"
+            message = "Good Character"
             color = Color.Black
         }
     }
+
 
 
 
@@ -122,17 +122,31 @@ fun DiceRollerScreen() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            DiceRow(vit, rolling1) { rollSingleDice(1) }
-            Spacer(modifier = Modifier.height(16.dp))
-            DiceRow(dex, rolling2) { rollSingleDice(2) }
-            Spacer(modifier = Modifier.height(16.dp))
-            DiceRow(wis, rolling3) { rollSingleDice(3) }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            DiceRow(label = "VITALITY", vit, rolling1) { rollSingleDice(1) }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            DiceRow(label = "DEXTERITY", dex, rolling2) { rollSingleDice(2) }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            DiceRow(label = "WISDOM", wis, rolling3) { rollSingleDice(3) }
+
+            Spacer(modifier = Modifier.height(40.dp))
+
+            // ------------------ TOTAL ------------------
+            Text(
+                text = "TOTAL: $total",
+                fontSize = 32.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
 
             Text(
                 text = message,
-                fontSize = 28.sp,
+                fontSize = 26.sp,
                 fontWeight = FontWeight.Bold,
                 color = color,
                 textAlign = TextAlign.Center
@@ -141,13 +155,24 @@ fun DiceRollerScreen() {
     }
 }
 
+
 @Composable
-fun DiceRow(diceValue: Int, isRolling: Boolean, onRoll: () -> Unit) {
+fun DiceRow(label: String, diceValue: Int, isRolling: Boolean, onRoll: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceEvenly
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
+
+        // --- TEXTO DEL ATRIBUTO ----
+        Text(
+            text = label,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.width(100.dp)
+        )
+
+        // --- CUADRO DEL DADO ----
         Box(
             modifier = Modifier.size(120.dp),
             contentAlignment = Alignment.Center
@@ -160,9 +185,15 @@ fun DiceRow(diceValue: Int, isRolling: Boolean, onRoll: () -> Unit) {
                 textAlign = TextAlign.Center
             )
         }
+
+        // --- BOTÓN ----
         Button(
             onClick = onRoll,
             enabled = !isRolling,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.Red,
+                contentColor = Color.White
+            ),
             modifier = Modifier.height(50.dp)
         ) {
             Icon(
@@ -184,6 +215,7 @@ private fun getDiceValueColor(value: Int, isRolling: Boolean): Color {
         else -> Color(0xFF333333)
     }
 }
+
 @Preview(
     showBackground = true,
     showSystemUi = true,
