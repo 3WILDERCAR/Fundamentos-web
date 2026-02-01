@@ -123,13 +123,13 @@ fun DiceRollerScreen() {
             verticalArrangement = Arrangement.Center
         ) {
 
-            DiceRow(label = "VITALITY", vit, rolling1) { rollSingleDice(1) }
+            DiceRow(label = "VIT", vit, rolling1) { rollSingleDice(1) }
             Spacer(modifier = Modifier.height(16.dp))
 
-            DiceRow(label = "DEXTERITY", dex, rolling2) { rollSingleDice(2) }
+            DiceRow(label = "DEX", dex, rolling2) { rollSingleDice(2) }
             Spacer(modifier = Modifier.height(16.dp))
 
-            DiceRow(label = "WISDOM", wis, rolling3) { rollSingleDice(3) }
+            DiceRow(label = "WIS", wis, rolling3) { rollSingleDice(3) }
 
             Spacer(modifier = Modifier.height(40.dp))
 
@@ -158,51 +158,69 @@ fun DiceRollerScreen() {
 
 @Composable
 fun DiceRow(label: String, diceValue: Int, isRolling: Boolean, onRoll: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFFF5F5F5)
+        ),
+        shape = MaterialTheme.shapes.medium
     ) {
-
-        // --- TEXTO DEL ATRIBUTO ----
-        Text(
-            text = label,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.width(100.dp)
-        )
-
-        // --- CUADRO DEL DADO ----
-        Box(
-            modifier = Modifier.size(120.dp),
-            contentAlignment = Alignment.Center
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),   // ⬅️ padding interior limpio y profesional
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
+
+            // ---- LABEL ----
             Text(
-                text = diceValue.toString(),
-                fontSize = 64.sp,
+                text = label,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
-                color = getDiceValueColor(diceValue, isRolling),
-                textAlign = TextAlign.Center
+                modifier = Modifier.weight(1f)
             )
-        }
 
-        // --- BOTÓN ----
-        Button(
-            onClick = onRoll,
-            enabled = !isRolling,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Red,
-                contentColor = Color.White
-            ),
-            modifier = Modifier.height(50.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Refresh,
-                contentDescription = "Roll Dice",
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(text = if (isRolling) "Rolling..." else "Roll")
+            // ---- DADO ----
+            Box(
+                modifier = Modifier
+                    .size(100.dp)
+                    .padding(horizontal = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = diceValue.toString(),
+                    fontSize = 48.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = getDiceValueColor(diceValue, isRolling)
+                )
+            }
+
+         
+            Button(
+                onClick = onRoll,
+                enabled = !isRolling,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.Red,
+                    contentColor = Color.White
+                ),
+                modifier = Modifier.height(48.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = "Roll Dice",
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (isRolling) "..." else "Roll",
+                    fontSize = 16.sp
+                )
+            }
         }
     }
 }
