@@ -1,14 +1,44 @@
 package com.example.lab02_01
 
+// --- Android Core ---
+// Bundle: Estructura usada por Android para pasar datos entre componentes.
 import android.os.Bundle
+
+// --- AndroidX Activity ---
+// ComponentActivity: Activity base moderna compatible con Jetpack Compose.
+// setContent: Establece el contenido de la UI usando Compose.
+// enableEdgeToEdge: Permite que la aplicación use la pantalla completa sin barras opacas.
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+
+// --- Jetpack Compose Foundation Layouts ---
+// Conjunto de layouts esenciales: Column, Row, Box, Spacer, padding, tamaños y expansiones.
 import androidx.compose.foundation.layout.*
+
+// --- Material 3 Icons ---
+// Icons: Contenedor de íconos vectoriales.
+// filled.Refresh: Ícono de "refrescar" usado para el botón de lanzar dados.
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
+
+// --- Material 3 Components ---
+// Componentes modernos basados en Material Design 3: botones, tarjetas, tipografías y estructura visual.
 import androidx.compose.material3.*
+
+// --- Compose Runtime ---
+// APIs de estado reactivo: remember, mutableStateOf, recomposición.
+// Permiten que la UI responda automáticamente a cambios.
 import androidx.compose.runtime.*
+
+// --- Compose UI Core ---
+// Alignment: Posicionamiento dentro de composables.
+// Modifier: Configura tamaño, padding, comportamiento, etc.
+// Color: Soporte para colores RGBA.
+// FontWeight: Grosor de texto.
+// TextAlign: Alineación de texto.
+// Preview: Permite ver composables sin ejecutar la app.
+// dp, sp: Unidades de medida para Compose.
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -17,6 +47,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+
+// --- Kotlin Coroutines ---
+// delay: Pausa no bloqueante para animaciones.
+// launch: Inicia corrutinas para trabajo asíncrono.
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -44,6 +78,9 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+// En la función solo se agregan la cantidad de dados que nosotros queremos
+//En este caso es 3 y como también queremos 3 botones para cada dado se agrega rollin n
+
 fun DiceRollerScreen() {
     var vit by remember { mutableIntStateOf(10) }
     var dex by remember { mutableIntStateOf(10) }
@@ -54,6 +91,8 @@ fun DiceRollerScreen() {
 
     val coroutineScope = rememberCoroutineScope()
 
+    // Esta Función se encarga de que cada dado se puede lanzar de forma individual
+    //En este caso se asigna un index para que cada dado pueda ser identificado
     fun rollSingleDice(diceIndex: Int) {
         coroutineScope.launch {
             when (diceIndex) {
@@ -78,7 +117,7 @@ fun DiceRollerScreen() {
             }
         }
     }
-
+    // realiza la suma del total de los 3 dados
     val total = vit + dex + wis
 
 
@@ -86,15 +125,21 @@ fun DiceRollerScreen() {
     val message: String
     val color: Color
 
+    // info investigada: el when es un equivalente de switch usado en Java
+    // esto sirve para poder varias condiciones en vez de anidar varios if´s
     when {
         total < 30 -> {
             message = "Bad"
             color = Color.Red
         }
+        // si el valor es <30 imprime bad de color rojo
         total == 50 -> {
             message = "Godlike!"
             color = Color(0xFFFFD700) // dorado
         }
+
+        // si el valor es >50 se imprime Godlike y se cambia el color a dorado
+
         else -> {
             message = "Good Character"
             color = Color.Black
@@ -102,8 +147,10 @@ fun DiceRollerScreen() {
     }
 
 
+        // si el valor está entre 30 y 50 imprime el número de color negro
 
 
+        //coloca el titulo de la app
     Scaffold(
         topBar = {
             TopAppBar(title = {
@@ -113,6 +160,7 @@ fun DiceRollerScreen() {
                 )
             })
         }
+        //
     ){ paddingValues ->
         Column(
             modifier = Modifier
@@ -122,7 +170,8 @@ fun DiceRollerScreen() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-
+        // Define en que posición u orden va a estar cada cado, también se puede modificar
+        // el tamaño
             DiceRow(label = "VIT", vit, rolling1) { rollSingleDice(1) }
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -133,7 +182,9 @@ fun DiceRollerScreen() {
 
             Spacer(modifier = Modifier.height(40.dp))
 
-            // ------------------ TOTAL ------------------
+        // Esta función text sirve para poder modificar el tamaño del total, es decir
+        // el texto que aparece abajo de todos los dados
+
             Text(
                 text = "TOTAL: $total",
                 fontSize = 32.sp,
@@ -156,9 +207,12 @@ fun DiceRollerScreen() {
 }
 
 
+
+// Composable que representa una fila de atributo con su valor y botón para tirar el dado
 @Composable
 fun DiceRow(label: String, diceValue: Int, isRolling: Boolean, onRoll: () -> Unit) {
 
+    // Tarjeta que contiene toda la fila del atributo
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -169,15 +223,17 @@ fun DiceRow(label: String, diceValue: Int, isRolling: Boolean, onRoll: () -> Uni
         ),
         shape = MaterialTheme.shapes.medium
     ) {
+
+        // Distribuye el texto, número y botón en una línea
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),   // ⬅️ padding interior limpio y profesional
+                .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
 
-            // ---- LABEL ----
+            // Nombre del atributo (VIT, DEX, WIS)
             Text(
                 text = label,
                 fontSize = 22.sp,
@@ -185,37 +241,43 @@ fun DiceRow(label: String, diceValue: Int, isRolling: Boolean, onRoll: () -> Uni
                 modifier = Modifier.weight(1f)
             )
 
-            // ---- DADO ----
+            // Contenedor del número del dado
             Box(
                 modifier = Modifier
                     .size(100.dp)
-                    .padding(horizontal = 12.dp),
+                    .padding(horizontal = 16.dp),
                 contentAlignment = Alignment.Center
             ) {
+                // Valor actual del dado
                 Text(
                     text = diceValue.toString(),
-                    fontSize = 48.sp,
+                    fontSize = 52.sp,
                     fontWeight = FontWeight.Bold,
                     color = getDiceValueColor(diceValue, isRolling)
                 )
             }
 
-         
+            // Botón para tirar el dado
             Button(
                 onClick = onRoll,
-                enabled = !isRolling,
+                enabled = !isRolling, // se desactiva mientras está animando
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color.Red,
                     contentColor = Color.White
                 ),
                 modifier = Modifier.height(48.dp)
             ) {
+
+                // Icono de recargar
                 Icon(
                     imageVector = Icons.Default.Refresh,
                     contentDescription = "Roll Dice",
                     modifier = Modifier.size(22.dp)
                 )
+
                 Spacer(modifier = Modifier.width(6.dp))
+
+                // Texto cambia mientras está tirando
                 Text(
                     text = if (isRolling) "..." else "Roll",
                     fontSize = 16.sp
@@ -224,6 +286,7 @@ fun DiceRow(label: String, diceValue: Int, isRolling: Boolean, onRoll: () -> Uni
         }
     }
 }
+
 
 private fun getDiceValueColor(value: Int, isRolling: Boolean): Color {
     return when {
