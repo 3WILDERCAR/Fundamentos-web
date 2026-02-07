@@ -14,7 +14,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -94,27 +98,11 @@ import org.koin.compose.viewmodel.koinViewModel
 fun HomeScreen(
     viewModel: HomeViewModel = koinViewModel(),
     onSongClick: (Song) -> Unit,
+    onFavoriteClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    /**
-     * OBSERVANDO STATEFLOW EN COMPOSE
-     * --------------------------------
-     * collectAsState() convierte el StateFlow en State de Compose.
-     *
-     * 'by' es delegación de Kotlin que permite usar uiState directamente
-     * en lugar de uiState.value
-     *
-     * Cuando el StateFlow emite un nuevo valor, este composable
-     * se RECOMPONE automáticamente con el nuevo estado.
-     */
     val uiState by viewModel.uiState.collectAsState()
 
-    /**
-     * RENDERIZADO BASADO EN ESTADO
-     * ----------------------------
-     * Usamos 'when' para renderizar diferentes UI según el estado.
-     * Esto es el corazón del patrón UDF: la UI es una función del estado.
-     */
     Box(modifier = modifier) {
         when (val state = uiState) {
             is HomeUiState.Loading -> {
@@ -124,7 +112,8 @@ fun HomeScreen(
             is HomeUiState.Success -> {
                 HomeContent(
                     categories = state.categories,
-                    onSongClick = onSongClick
+                    onSongClick = onSongClick,
+                    onFavoriteClick = onFavoriteClick
                 )
             }
 
@@ -173,40 +162,21 @@ private fun ErrorContent(message: String) {
 @Composable
 private fun HomeContent(
     categories: List<Category>,
-    onSongClick: (Song) -> Unit
+    onSongClick: (Song) -> Unit,
+    onFavoriteClick: (String) -> Unit
 ) {
-    /**
-     * LAZYCOLUMN: Lista Vertical Eficiente
-     * ------------------------------------
-     * LazyColumn es el equivalente a RecyclerView en Compose.
-     *
-     * Características:
-     * - Solo compone items visibles (+ buffer)
-     * - Recicla composiciones al hacer scroll
-     * - Soporta diferentes tipos de items
-     *
-     * IMPORTANTE: contentPadding añade padding al contenido
-     * scrolleable sin afectar el área de scroll.
-     */
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(vertical = 16.dp)
     ) {
-        /**
-         * items {} es una función de LazyListScope que genera
-         * múltiples items a partir de una lista.
-         *
-         * key = { it.name } proporciona una clave estable para
-         * cada item. Esto optimiza recomposiciones cuando la
-         * lista cambia (agregados, eliminados, reordenados).
-         */
         items(
             items = categories,
             key = { it.name }
         ) { category ->
             CategorySection(
                 category = category,
-                onSongClick = onSongClick
+                onSongClick = onSongClick,
+                onFavoriteClick = onFavoriteClick
             )
         }
     }
@@ -221,12 +191,12 @@ private fun HomeContent(
 @Composable
 private fun CategorySection(
     category: Category,
-    onSongClick: (Song) -> Unit
+    onSongClick: (Song) -> Unit,
+    onFavoriteClick: (String) -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxWidth()
     ) {
-        // Título de la sección
         Text(
             text = category.name,
             style = MaterialTheme.typography.titleLarge,
@@ -234,17 +204,6 @@ private fun CategorySection(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         )
 
-        /**
-         * LAZYROW: Lista Horizontal Eficiente
-         * -----------------------------------
-         * Similar a LazyColumn pero con scroll horizontal.
-         *
-         * horizontalArrangement = Arrangement.spacedBy()
-         * añade espacio entre items sin necesidad de padding manual.
-         *
-         * contentPadding permite que los items en los extremos
-         * se puedan ver completamente al hacer scroll.
-         */
         LazyRow(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -255,7 +214,8 @@ private fun CategorySection(
             ) { song ->
                 SongCard(
                     song = song,
-                    onClick = { onSongClick(song) }
+                    onClick = { onSongClick(song) },
+                    onFavoriteClick = { onFavoriteClick(song.id) }
                 )
             }
         }
@@ -273,7 +233,8 @@ private fun CategorySection(
 @Composable
 private fun SongCard(
     song: Song,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onFavoriteClick: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -283,11 +244,37 @@ private fun SongCard(
             .clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Cover generado por código
-        SongCoverMock(
-            colorSeed = song.colorSeed,
-            size = 120.dp
-        )
+
+        /**
+         * CONTENEDOR PARA SUPERPONER EL COVER Y EL LIKE
+         */
+        Box(modifier = Modifier.width(120.dp)) {
+
+            // Cover generado por código
+            SongCoverMock(
+                colorSeed = song.colorSeed,
+                size = 120.dp
+            )
+
+            /**
+             * LIKE ESTILO SPOTIFY ❤️‍🔥
+             * - Filled si es favorito
+             * - Outline si no
+             * - Aparece en la esquina superior derecha
+             */
+            Icon(
+                imageVector = if (song.isFavorite)
+                    Icons.Filled.Favorite
+                else
+                    Icons.Outlined.FavoriteBorder,
+                contentDescription = "Like",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(6.dp)
+                    .clickable { onFavoriteClick() }
+            )
+        }
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -297,7 +284,7 @@ private fun SongCard(
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis, // "..." si el texto es muy largo
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.fillMaxWidth()
         )
 
