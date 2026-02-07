@@ -20,7 +20,7 @@ data class Song(
     val artist: String,
     val colorSeed: Int, // Usado para generar gradientes en SongCoverMock
 
-    // 🔥 Campo agregado para Parte 1 - Sistema de Favoritos
+ 
     val isFavorite: Boolean = false
 )
 
