@@ -45,7 +45,9 @@ import com.curso.android.module2.stream.ui.screens.LibraryScreen
 import com.curso.android.module2.stream.ui.screens.PlayerScreen
 import com.curso.android.module2.stream.ui.screens.SearchScreen
 import com.curso.android.module2.stream.ui.theme.StreamUITheme
+import com.curso.android.module2.stream.ui.viewmodel.HomeViewModel
 import org.koin.compose.koinInject
+import org.koin.compose.viewmodel.koinViewModel
 import kotlin.reflect.KClass
 
 /**
@@ -198,7 +200,7 @@ fun getBottomNavItems(): List<BottomNavItem> {
  * Usamos navigate() con opciones especiales para tabs:
  * - popUpTo(findStartDestination): Evita acumular back stack
  * - saveState/restoreState: Preserva el estado de cada tab
- * - launchSingleTop: Evita múltiples instancias del mismo destino
+ * - launchSingleTop: Evita múltiples instances del mismo destino
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -297,7 +299,7 @@ fun StreamUIApp() {
                         bottomNavItems.forEach { item ->
                             /**
                              * ESTADO SELECCIONADO
-                             * -------------------
+                             * ------------------
                              * Usamos hierarchy para verificar si el destino actual
                              * está en la jerarquía del item. Esto maneja correctamente
                              * el caso de destinos anidados.
@@ -327,7 +329,7 @@ fun StreamUIApp() {
                                      * - El usuario vuelve donde estaba en ese tab
                                      *
                                      * launchSingleTop = true:
-                                     * - Evita crear múltiples instancias del mismo destino
+                                     * - Evita crear múltiples instances del mismo destino
                                      * - Si ya estás en Home, tocar Home no crea otro Home
                                      */
                                     navController.navigate(
@@ -387,7 +389,11 @@ fun StreamUIApp() {
                  * por lo que el lambda no necesita extraer nada.
                  */
                 composable<HomeDestination> {
+                    // Inyectamos el ViewModel para el Home, con su scope atado a este destino.
+                    val homeViewModel: HomeViewModel = koinViewModel()
+
                     HomeScreen(
+                        viewModel = homeViewModel,
                         onSongClick = { song ->
                             /**
                              * NAVEGACIÓN TYPE-SAFE
@@ -399,7 +405,9 @@ fun StreamUIApp() {
                              * - songId es del tipo correcto (String)
                              */
                             navController.navigate(PlayerDestination(songId = song.id))
-                        }
+                        },
+                        // El evento de favorito es manejado por el ViewModel.
+                        onFavoriteClick = homeViewModel::toggleFavorite
                     )
                 }
 
