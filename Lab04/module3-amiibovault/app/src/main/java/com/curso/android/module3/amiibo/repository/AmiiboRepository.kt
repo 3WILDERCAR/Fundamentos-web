@@ -79,6 +79,12 @@ class AmiiboRepository(
         return amiiboDao.getAllAmiibos()
     }
 
+
+    fun searchAmiibos(query: String): Flow<List<AmiiboEntity>> {
+        return amiiboDao.searchAmiibos(query)
+    }
+
+
     /**
      * =========================================================================
      * REFRESCAR AMIIBOS (SINCRONIZACIÓN)
@@ -269,6 +275,8 @@ class AmiiboRepository(
     fun getAmiiboCount(): Flow<Int> {
         return amiiboDao.getCount()
     }
+
+
 }
 
 /**
