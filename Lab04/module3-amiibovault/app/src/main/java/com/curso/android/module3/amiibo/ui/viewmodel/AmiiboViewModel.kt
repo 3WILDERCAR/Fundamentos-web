@@ -22,7 +22,7 @@ import kotlinx.coroutines.launch
  * Usar sealed interface garantiza que manejemos TODOS los casos en la UI.
  *
  * PATRÓN UISTATE:
- * ---------------
+ * --------------
  * En lugar de tener múltiples variables separadas:
  * ```kotlin
  * // ❌ Antipatrón
@@ -445,7 +445,7 @@ class AmiiboViewModel(
                  * - Si es del servidor (Parse) → esperar y reintentar después
                  * - Si es local (Database) → reiniciar app o liberar espacio
                  */
-                val cachedAmiibos = _loadedAmiibos.value
+                val cachedData = _loadedAmiibos.value
                 val errorType = ErrorType.from(e)
 
                 // Determinar si el error es recuperable con un reintento
@@ -460,16 +460,16 @@ class AmiiboViewModel(
                     message = e.message,
                     errorType = errorType,
                     isRetryable = isRetryable,
-                    cachedAmiibos = cachedAmiibos
+                    cachedAmiibos = cachedData
                 )
             } catch (e: Exception) {
                 // Catch-all para errores no tipados (no debería llegar aquí)
-                val cachedAmiibos = _loadedAmiibos.value
+                val cachedData = _loadedAmiibos.value
                 _uiState.value = AmiiboUiState.Error(
                     message = e.message ?: "Error desconocido al cargar datos",
                     errorType = ErrorType.UNKNOWN,
                     isRetryable = true,
-                    cachedAmiibos = cachedAmiibos
+                    cachedAmiibos = cachedData
                 )
             }
         }
