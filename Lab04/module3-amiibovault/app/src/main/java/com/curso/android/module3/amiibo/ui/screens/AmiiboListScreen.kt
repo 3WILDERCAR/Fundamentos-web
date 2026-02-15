@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Refresh
@@ -40,6 +41,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -230,7 +232,7 @@ fun AmiiboListScreen(
                 )
             )
         },
-        
+
         snackbarHost = {
             SnackbarHost(hostState = snackbarHostState)
         }
@@ -252,50 +254,50 @@ fun AmiiboListScreen(
                 )
             }
 
-            // Estado de éxito con datos
             is AmiiboUiState.Success -> {
-                /**
-                 * =====================================================================
-                 * PULL-TO-REFRESH (Material 3)
-                 * =====================================================================
-                 *
-                 * PullToRefreshBox es el componente oficial de Material 3 para
-                 * implementar el patrón "pull-to-refresh" (deslizar hacia abajo
-                 * para actualizar).
-                 *
-                 * CONCEPTO: Pull-to-Refresh
-                 * -------------------------
-                 * Es un patrón de UX muy común en apps móviles que permite al
-                 * usuario actualizar el contenido deslizando hacia abajo desde
-                 * la parte superior de la lista.
-                 *
-                 * Parámetros clave:
-                 * - isRefreshing: Controla si se muestra el indicador de carga
-                 * - onRefresh: Callback que se ejecuta cuando el usuario "suelta"
-                 *
-                 * VENTAJAS sobre LinearProgressIndicator manual:
-                 * 1. Animación nativa del sistema (familiar para el usuario)
-                 * 2. Gesture handling automático
-                 * 3. Integración con el scroll del contenido
-                 *
-                 * NOTA: Requiere @OptIn(ExperimentalMaterial3Api::class)
-                 */
+                val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+                val filteredList by viewModel.filteredList.collectAsStateWithLifecycle()
+
                 PullToRefreshBox(
                     isRefreshing = state.isRefreshing,
                     onRefresh = { viewModel.refreshAmiibos() },
                     modifier = Modifier.padding(paddingValues)
                 ) {
-                    // Grid de Amiibos con paginación
-                    AmiiboGrid(
-                        amiibos = state.amiibos,
-                        onAmiiboClick = onAmiiboClick,
-                        hasMorePages = hasMorePages,
-                        isLoadingMore = isLoadingMore,
-                        paginationError = paginationError,
-                        onLoadMore = { viewModel.loadNextPage() },
-                        onRetryLoadMore = { viewModel.retryLoadMore() },
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    Column(modifier = Modifier.fillMaxSize()) {
+
+                        // 🔍 SEARCH BAR
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { viewModel.updateSearchQuery(it) },
+                            label = { Text("Buscar Amiibo") },
+                            trailingIcon = {
+                                if (searchQuery.isNotEmpty()) {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = "Limpiar búsqueda",
+                                        modifier = Modifier.clickable {
+                                            viewModel.updateSearchQuery("")
+                                        }
+                                    )
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp)
+                        )
+
+                        // GRID usando la lista filtrada
+                        AmiiboGrid(
+                            amiibos = filteredList,
+                            onAmiiboClick = onAmiiboClick,
+                            hasMorePages = hasMorePages,
+                            isLoadingMore = isLoadingMore,
+                            paginationError = paginationError,
+                            onLoadMore = { viewModel.loadNextPage() },
+                            onRetryLoadMore = { viewModel.retryLoadMore() },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 }
             }
 
@@ -303,7 +305,7 @@ fun AmiiboListScreen(
              * Estado de error con tipo específico.
              *
              * CONCEPTO: Errores Tipados en UI
-             * -------------------------------
+             * ------------------------------
              * El estado de error ahora incluye:
              * - errorType: Para mostrar iconos apropiados
              * - isRetryable: Para decidir si mostrar botón de reintentar
@@ -647,7 +649,7 @@ private fun AmiiboGrid(
          * =====================================================================
          *
          * CONCEPTO: Errores Inline en Infinite Scroll
-         * -------------------------------------------
+         * ------------------------------------------
          * Cuando falla la carga de más items, NO queremos:
          * - Mostrar una pantalla de error completa (perdemos los datos)
          * - Ignorar el error silenciosamente (mala UX)
@@ -686,9 +688,9 @@ private fun AmiiboGrid(
 }
 
 /**
- * ============================================================================
+ * ===========================================================================
  * COMPONENTE: Error de Paginación Inline
- * ============================================================================
+ * ===========================================================================
  *
  * Muestra un mensaje de error y botón de reintentar al final de la lista
  * cuando falla la carga de más items.
