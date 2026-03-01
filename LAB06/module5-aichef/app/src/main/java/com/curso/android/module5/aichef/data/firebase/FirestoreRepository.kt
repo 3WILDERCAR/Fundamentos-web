@@ -194,4 +194,51 @@ class FirestoreRepository @javax.inject.Inject constructor() : IFirestoreReposit
             Result.failure(Exception("Error actualizando imagen: ${e.message}"))
         }
     }
+
+    /**
+     * Alterna el estado de favorito de una receta
+     * * CONCEPTO: Actualización atómica
+     * Usamos update() para cambiar solo el campo isFavorite.
+     * * @param recipeId ID de la receta
+     * @param isFavorite Nuevo estado deseado
+     */
+    override suspend fun toggleFavorite(recipeId: String, isFavorite: Boolean): Result<Unit> {
+        return try {
+            firestore.collection("recipes").document(recipeId)
+                .update("isFavorite", isFavorite)
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(Exception("Error al actualizar favorito: ${e.message}"))
+        }
+    }
+
+    /**
+     * Observa solo las recetas marcadas como favoritas por el usuario
+     * * CONCEPTO: Query Compuesta
+     * Filtramos por userId Y por isFavorite == true.
+     * IMPORTANTE: Esto requiere el índice que creamos antes en la consola.
+     */
+    override fun observeFavoriteRecipes(userId: String): Flow<List<Recipe>> = callbackFlow {
+        val query = recipesCollection
+            .whereEqualTo("userId", userId)
+            .whereEqualTo("isFavorite", true) // Filtro adicional
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+
+        val listenerRegistration = query.addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                trySend(emptyList())
+                return@addSnapshotListener
+            }
+
+            val recipes = snapshot?.documents?.mapNotNull { document ->
+                val data = document.data ?: return@mapNotNull null
+                Recipe.fromFirestore(document.id, data)
+            } ?: emptyList()
+
+            trySend(recipes)
+        }
+
+        awaitClose { listenerRegistration.remove() }
+    }
 }
