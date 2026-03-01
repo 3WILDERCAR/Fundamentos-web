@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
@@ -94,6 +95,10 @@ class ChefViewModel @Inject constructor(
     private val _authUiState = MutableStateFlow<UiState<Unit>>(UiState.Idle)
     val authUiState: StateFlow<UiState<Unit>> = _authUiState.asStateFlow()
 
+    // Estado para controlar si mostramos solo favoritos
+    private val _showFavoritesOnly = MutableStateFlow(false)
+    val showFavoritesOnly: StateFlow<Boolean> = _showFavoritesOnly.asStateFlow()
+
     // =========================================================================
     // LISTA DE RECETAS
     // =========================================================================
@@ -107,20 +112,31 @@ class ChefViewModel @Inject constructor(
      *
      * Si el usuario no está autenticado, emitimos lista vacía.
      */
-    val recipes: StateFlow<List<Recipe>> = authState
-        .flatMapLatest { state ->
-            when (state) {
-                is AuthState.Authenticated -> {
+    /**
+     * Lista de recetas dinámica (Filtra por favoritos o muestra todas)
+     */
+    val recipes: StateFlow<List<Recipe>> = combine(
+        authState,
+        _showFavoritesOnly
+    ) { state, showFavorites ->
+        Pair(state, showFavorites)
+    }.flatMapLatest { (state, showFavorites) ->
+        when (state) {
+            is AuthState.Authenticated -> {
+                if (showFavorites) {
+                    // Usamos la nueva función del repositorio
+                    firestoreRepository.observeFavoriteRecipes(state.userId)
+                } else {
                     firestoreRepository.observeUserRecipes(state.userId)
                 }
-                else -> flowOf(emptyList())
             }
+            else -> flowOf(emptyList())
         }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
 
     // =========================================================================
     // ESTADO DE GENERACIÓN DE RECETAS
@@ -285,6 +301,24 @@ class ChefViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Alterna el estado de favorito de una receta en Firestore
+     */
+    fun toggleFavorite(recipe: Recipe) {
+        viewModelScope.launch {
+            // Invertimos el estado actual
+            val newStatus = !recipe.isFavorite
+            firestoreRepository.toggleFavorite(recipe.id, newStatus)
+        }
+    }
+
+    /**
+     * Activa o desactiva el filtro de favoritos en la pantalla principal
+     */
+    fun toggleFavoritesFilter() {
+        _showFavoritesOnly.value = !_showFavoritesOnly.value
+    }
+
     // =========================================================================
     // ACCIONES DE GENERACIÓN DE IMÁGENES CON CACHE
     // =========================================================================
@@ -324,36 +358,36 @@ class ChefViewModel @Inject constructor(
         imageGenerationJob?.cancel()
 
         imageGenerationJob = viewModelScope.launch {
-            // ================================================================
+            // ===============================================================-
             // PASO 1: Verificar si ya existe imagen cacheada
-            // ================================================================
+            // ===============================================================-
             if (existingImageUrl.isNotBlank()) {
                 // Ya tenemos la imagen, usar directamente
                 _imageGenerationState.value = UiState.Success(existingImageUrl)
                 return@launch
             }
 
-            // ================================================================
+            // ===============================================================-
             // PASO 2: No hay cache, generar nueva imagen
-            // ================================================================
+            // ===============================================================-
             _imageGenerationState.value = UiState.Loading("Generando imagen del plato...")
 
             try {
                 // Generar imagen con Gemini
                 val bitmap = aiLogicDataSource.generateRecipeImage(recipeTitle, ingredients)
 
-                // ============================================================
+                // ===========================================================-
                 // PASO 3: Subir imagen a Firebase Storage
-                // ============================================================
+                // ===========================================================-
                 _imageGenerationState.value = UiState.Loading("Guardando imagen...")
 
                 val uploadResult = storageRepository.uploadRecipeImage(recipeId, bitmap)
 
                 uploadResult.fold(
                     onSuccess = { imageUrl ->
-                        // ====================================================
+                        // ====================================================-
                         // PASO 4: Guardar URL en Firestore para futuro cache
-                        // ====================================================
+                        // ====================================================-
                         firestoreRepository.updateGeneratedImageUrl(recipeId, imageUrl)
 
                         // Éxito - devolver la URL
