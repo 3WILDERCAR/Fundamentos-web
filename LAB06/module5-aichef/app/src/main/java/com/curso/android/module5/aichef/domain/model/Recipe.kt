@@ -28,15 +28,12 @@ data class Recipe(
     val steps: List<String> = emptyList(),
     val imageUri: String = "",
     val generatedImageUrl: String = "",
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    // 1. NUEVO CAMPO: Agregamos isFavorite (por defecto false)
+    val isFavorite: Boolean = false
 ) {
     /**
      * Convierte el modelo a un Map para guardar en Firestore
-     *
-     * CONCEPTO: Firestore Document Structure
-     * Firestore almacena datos como documentos JSON-like.
-     * Podemos usar data classes directamente o convertir a Map
-     * para mayor control sobre los nombres de campos.
      */
     fun toMap(): Map<String, Any> = mapOf(
         "userId" to userId,
@@ -45,16 +42,14 @@ data class Recipe(
         "steps" to steps,
         "imageUri" to imageUri,
         "generatedImageUrl" to generatedImageUrl,
-        "createdAt" to createdAt
+        "createdAt" to createdAt,
+        // 2. AGREGAR AL MAP: Para que se guarde en la base de datos
+        "isFavorite" to isFavorite
     )
 
     companion object {
         /**
          * Crea una Recipe desde un documento de Firestore
-         *
-         * @param id ID del documento
-         * @param data Datos del documento como Map
-         * @return Recipe con los datos del documento
          */
         @Suppress("UNCHECKED_CAST")
         fun fromFirestore(id: String, data: Map<String, Any?>): Recipe {
@@ -66,12 +61,13 @@ data class Recipe(
                 steps = (data["steps"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
                 imageUri = data["imageUri"] as? String ?: "",
                 generatedImageUrl = data["generatedImageUrl"] as? String ?: "",
-                createdAt = (data["createdAt"] as? Long) ?: System.currentTimeMillis()
+                createdAt = (data["createdAt"] as? Long) ?: System.currentTimeMillis(),
+                // 3. LEER DE FIRESTORE: Recuperamos el estado del favorito
+                isFavorite = data["isFavorite"] as? Boolean ?: false
             )
         }
     }
 }
-
 /**
  * =============================================================================
  * GeneratedRecipe - Resultado del análisis de IA
