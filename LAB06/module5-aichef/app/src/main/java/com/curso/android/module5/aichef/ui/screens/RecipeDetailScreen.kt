@@ -47,7 +47,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.curso.android.module5.aichef.domain.model.UiState
 import com.curso.android.module5.aichef.ui.viewmodel.ChefViewModel
-
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.FloatingActionButton
+import com.curso.android.module5.aichef.util.ShareUtils
+import androidx.compose.ui.platform.LocalContext
 /**
  * =============================================================================
  * RecipeDetailScreen - Pantalla de detalle de receta con imagen generada por IA
@@ -124,30 +127,14 @@ fun RecipeDetailScreen(
     onNavigateBack: () -> Unit
 ) {
     // =========================================================================
-    // OBSERVACIÓN DE ESTADOS
+    // CONTEXTO Y OBSERVACIÓN DE ESTADOS
     // =========================================================================
-    // Obtenemos la receta buscándola en la lista del ViewModel
-    // Esto evita una llamada adicional a Firestore
+    val context = LocalContext.current // Necesario para disparar el Intent de compartir
     val recipes by viewModel.recipes.collectAsStateWithLifecycle()
     val recipe = recipes.find { it.id == recipeId }
 
-    // Estado de la generación de imagen
     val imageState by viewModel.imageGenerationState.collectAsStateWithLifecycle()
 
-    // =========================================================================
-    // SIDE EFFECT: Verificar Cache o Generar Imagen
-    // =========================================================================
-    // LaunchedEffect se ejecuta cuando 'recipe' cambia
-    // Esto verifica si existe imagen cacheada o genera una nueva
-    //
-    // CONCEPTO: LaunchedEffect
-    // - Se ejecuta en un CoroutineScope ligado al ciclo de vida del composable
-    // - Se cancela automáticamente si el composable sale de composición
-    // - La key (recipe) determina cuándo re-ejecutar el efecto
-    //
-    // CONCEPTO: Cache-First Strategy
-    // - Si recipe.generatedImageUrl no está vacía, se usa directamente
-    // - Si está vacía, se genera con IA, sube a Storage, y guarda URL
     LaunchedEffect(recipe) {
         recipe?.let {
             viewModel.generateRecipeImage(
@@ -158,7 +145,6 @@ fun RecipeDetailScreen(
             )
         }
     }
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -174,7 +160,6 @@ fun RecipeDetailScreen(
                         )
                     }
                 },
-                // --- AQUÍ AGREGAMOS EL CORAZÓN ---
                 actions = {
                     recipe?.let { currentRecipe ->
                         IconButton(onClick = { viewModel.toggleFavorite(currentRecipe) }) {
@@ -197,10 +182,29 @@ fun RecipeDetailScreen(
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             )
+        },
+        // =====================================================================
+        // BOTÓN FLOTANTE DE COMPARTIR (PARTE 2)
+        // =====================================================================
+        floatingActionButton = {
+            recipe?.let { currentRecipe ->
+                FloatingActionButton(
+                    onClick = {
+                        // Llamamos a la utilidad que creamos anteriormente
+                        ShareUtils.shareRecipe(context, currentRecipe)
+                    },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = "Compartir receta"
+                    )
+                }
+            }
         }
     ) { paddingValues ->
         if (recipe == null) {
-            // Estado de error: receta no encontrada
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -210,11 +214,6 @@ fun RecipeDetailScreen(
                 Text("Receta no encontrada")
             }
         } else {
-            // ================================================================
-            // CONTENIDO SCROLLEABLE
-            // ================================================================
-            // verticalScroll permite scroll cuando el contenido es largo
-            // rememberScrollState mantiene la posición durante recomposiciones
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -222,14 +221,13 @@ fun RecipeDetailScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp)
             ) {
-                // Sección de imagen generada por IA con cache
                 RecipeImageSection(
                     imageState = imageState,
                     recipeTitle = recipe.title,
                     onRetry = {
                         viewModel.generateRecipeImage(
                             recipeId = recipe.id,
-                            existingImageUrl = "", // Forzar regeneración
+                            existingImageUrl = "",
                             recipeTitle = recipe.title,
                             ingredients = recipe.ingredients
                         )
@@ -238,20 +236,17 @@ fun RecipeDetailScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Sección de ingredientes
                 IngredientsSection(ingredients = recipe.ingredients)
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Sección de pasos de preparación
                 StepsSection(steps = recipe.steps)
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(80.dp)) // Espacio extra para que el FAB no tape el texto
             }
         }
     }
 }
-
 /**
  * =============================================================================
  * RecipeImageSection - Sección de imagen generada con IA y cache
