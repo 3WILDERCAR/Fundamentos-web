@@ -15,6 +15,8 @@
 import type { Country } from '../types/country';
 import { formatNumber, formatCapitals } from '../utils/format';
 import { createElement } from '../utils/dom';
+import { isFavorite, toggleFavorite } from '../utils/Storage';
+
 
 /**
  * Crea una tarjeta de país para mostrar en la lista.
@@ -70,7 +72,13 @@ export function createCountryCard(
         ${country.region}
       </span>
     </div>
-
+ <!-- Botón de favorito -->
+  <button
+    class="favorite-btn absolute top-3 left-3 text-2xl transition-transform hover:scale-110"
+    aria-label="${isFavorite(country.cca3) ? 'Eliminar de favoritos' : 'Agregar a favoritos'}"
+  >
+    ${isFavorite(country.cca3) ? '❤️' : '🤍'}
+  </button>
     <div class="p-5">
       <!-- Nombre del país -->
       <h2 class="text-xl font-bold text-white mb-2 truncate">
@@ -133,6 +141,19 @@ export function createCountryCard(
       onClick(country);
     }
   });
+  const favBtn = card.querySelector<HTMLButtonElement>('.favorite-btn')!;
+
+favBtn.addEventListener('click', (e) => {
+  e.stopPropagation(); // evita que se dispare el click de la tarjeta
+  toggleFavorite(country.cca3);
+
+  // Actualizar UI del corazón
+  favBtn.textContent = isFavorite(country.cca3) ? '❤️' : '🤍';
+  favBtn.setAttribute(
+    'aria-label',
+    isFavorite(country.cca3) ? 'Eliminar de favoritos' : 'Agregar a favoritos'
+  );
+});
 
   return card;
 }

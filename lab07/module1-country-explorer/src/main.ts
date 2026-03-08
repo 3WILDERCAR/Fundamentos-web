@@ -35,6 +35,7 @@ import { searchCountries, ApiError } from './services/countryApi';
 import { renderCountryList } from './components/CountryCard';
 import { openModal } from './components/CountryModal';
 import { getRequiredElement, showElement, hideElement, onDOMReady, debounce } from './utils/dom';
+import { getFavorites, isFavorite, toggleFavorite } from './utils/Storage';
 
 // =============================================================================
 // ESTADO DE LA APLICACIÓN
@@ -66,6 +67,9 @@ let emptyState: HTMLElement;
 let noResultsState: HTMLElement;
 let countriesList: HTMLElement;
 let regionFilter: HTMLSelectElement;
+let favoritesToggle: HTMLButtonElement;
+let showingFavorites = false; // flag para saber si estamos mostrando solo favoritos
+let favToggleText: HTMLElement;
 /**
  * Inicializa las referencias a los elementos del DOM.
  * Se llama una vez cuando la aplicación arranca.
@@ -75,6 +79,8 @@ function initializeElements(): void {
   searchButton = getRequiredElement<HTMLButtonElement>('#searchButton');
   retryButton = getRequiredElement<HTMLButtonElement>('#retryButton');
   regionFilter = getRequiredElement<HTMLSelectElement>('#regionFilter');
+  favoritesToggle = getRequiredElement<HTMLButtonElement>('#favoritesToggle');
+  favToggleText = getRequiredElement<HTMLElement>('#favToggleText');
   loadingState = getRequiredElement<HTMLElement>('#loadingState');
   errorState = getRequiredElement<HTMLElement>('#errorState');
   errorMessage = getRequiredElement<HTMLElement>('#errorMessage');
@@ -135,14 +141,19 @@ function render(state: UiState): void {
       break;
 
     case 'success':
-      // Búsqueda exitosa con resultados
-      if (state.data.length === 0) {
-        showElement(noResultsState);
-      } else {
-        showElement(countriesList);
-        renderCountryList(state.data, countriesList, handleCountryClick);
-      }
-      break;
+  if (state.data.length === 0) {
+    showElement(noResultsState);
+  } else {
+    showElement(countriesList);
+
+    // Si estamos mostrando solo favoritos, filtramos
+    const dataToRender = showingFavorites
+      ? state.data.filter(c => getFavorites().includes(c.cca3))
+      : state.data;
+
+    renderCountryList(dataToRender, countriesList, handleCountryClick);
+  }
+  break;
 
     case 'error':
       // Error en la búsqueda
@@ -199,22 +210,21 @@ async function handleSearch(): Promise<void> {
   render({ status: 'loading' });
 
   try {
-    // =========================================================================
-    // ASYNC/AWAIT Y MANEJO DE ERRORES
-    // =========================================================================
-    // await pausa la ejecución hasta que la Promise se resuelve.
-    // Si la Promise se rechaza, el error se captura en el catch.
-    // =========================================================================
     const countries = await searchCountries(query);
-
 
     const selectedRegion = regionFilter.value;
 
-    // filtrado por continente
-    const filteredCountries =
-    selectedRegion === 'all'
-      ? countries
-      : countries.filter((country) => country.region === selectedRegion);
+    // Filtrado por continente
+    let filteredCountries =
+      selectedRegion === 'all'
+        ? countries
+        : countries.filter((country) => country.region === selectedRegion);
+
+    // Filtrado por favoritos si el toggle está activo
+    if (showingFavorites) {
+      const favCodes = getFavorites();
+      filteredCountries = filteredCountries.filter(c => favCodes.includes(c.cca3));
+    }
 
     if (filteredCountries.length === 0) {
       render({ status: 'empty' });
@@ -222,7 +232,6 @@ async function handleSearch(): Promise<void> {
       render({ status: 'success', data: filteredCountries });
     }
   } catch (error) {
-    // Determinamos el mensaje de error apropiado
     let message = 'Error desconocido al buscar países';
 
     if (error instanceof ApiError) {
@@ -232,8 +241,6 @@ async function handleSearch(): Promise<void> {
     }
 
     render({ status: 'error', message });
-
-    // Log para debugging (en producción usaríamos un servicio de logging)
     console.error('Error en búsqueda:', error);
   }
 }
@@ -294,6 +301,17 @@ function setupEventListeners(): void {
 
   // Botón de reintentar
   retryButton.addEventListener('click', handleRetry);
+  favoritesToggle.addEventListener('click', () => {
+  showingFavorites = !showingFavorites;
+
+  // Cambiar texto del botón según estado
+  favToggleText.textContent = showingFavorites ? 'Mostrar todos' : 'Favoritos';
+
+  // Re-renderizar usando el estado actual
+  if (currentState.status === 'success') {
+    render(currentState);
+  }
+});
 }
 
 /**
