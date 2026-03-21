@@ -19,29 +19,30 @@
 //
 // Express + Prisma:
 //   class PropertyRepository {
-//       async findAll(filters): Promise<Property[]>
+//       async findAll(filters, pagination): Promise<Property[]>
+//       async count(filters): Promise<number>
 //       async create(data): Promise<Property>
 //   }
 // =============================================================================
-
+ 
 import { PrismaClient } from '@prisma/client';
 import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 import type { Property, PropertyFilters, CreatePropertyInput, UpdatePropertyInput } from '../types/property.js';
-
+ 
 // =============================================================================
 // CLIENTE PRISMA (Singleton con Adapter para Prisma 7)
 // =============================================================================
 // En Prisma 7, se requiere un driver adapter para conectar a la base de datos.
 // Usamos @prisma/adapter-better-sqlite3 para SQLite.
 // =============================================================================
-
+ 
 const adapter = new PrismaBetterSqlite3({ url: 'file:./prisma/dev.db' });
 const prisma = new PrismaClient({ adapter });
-
+ 
 // =============================================================================
 // TIPOS INTERNOS
 // =============================================================================
-
+ 
 interface PrismaProperty {
   id: string;
   title: string;
@@ -59,11 +60,16 @@ interface PrismaProperty {
   createdAt: Date;
   updatedAt: Date;
 }
-
+ 
+interface PaginationOptions {
+  limit: number;
+  offset: number;
+}
+ 
 // =============================================================================
 // TRANSFORMADORES
 // =============================================================================
-
+ 
 /**
  * Transforma un registro de Prisma al tipo Property de la API.
  *
@@ -90,27 +96,27 @@ function toProperty(dbProperty: PrismaProperty): Property {
     updatedAt: dbProperty.updatedAt.toISOString(),
   };
 }
-
+ 
 /**
  * Prepara datos para Prisma (arrays a JSON strings).
  */
 function toPrismaData(data: CreatePropertyInput | UpdatePropertyInput): Record<string, unknown> {
   const result: Record<string, unknown> = { ...data };
-
+ 
   if ('amenities' in data && data.amenities) {
     result.amenities = JSON.stringify(data.amenities);
   }
   if ('images' in data && data.images) {
     result.images = JSON.stringify(data.images);
   }
-
+ 
   return result;
 }
-
+ 
 // =============================================================================
 // REPOSITORIO
 // =============================================================================
-
+ 
 /**
  * Repositorio de propiedades.
  *
@@ -119,19 +125,41 @@ function toPrismaData(data: CreatePropertyInput | UpdatePropertyInput): Record<s
  */
 export const propertyRepository = {
   /**
-   * Busca todas las propiedades con filtros opcionales.
+   * Busca propiedades con filtros opcionales y paginación.
+   *
+   * @param filters  - Criterios de búsqueda (propertyType, city, precio, etc.)
+   * @param pagination - { limit, offset } para paginar. Si se omite, devuelve todo.
    */
-  async findAll(filters?: PropertyFilters): Promise<Property[]> {
+  async findAll(filters?: PropertyFilters, pagination?: PaginationOptions): Promise<Property[]> {
     const where = buildWhereClause(filters);
-
+ 
     const properties = await prisma.property.findMany({
       where,
       orderBy: { createdAt: 'desc' },
+      // take y skip son ignorados por Prisma si son undefined → sin paginación
+      take: pagination?.limit,
+      skip: pagination?.offset,
     });
-
+ 
     return properties.map(toProperty);
   },
-
+ 
+  /**
+   * Cuenta el total de propiedades que coinciden con los filtros.
+   *
+   * Se usa junto con findAll para construir los metadatos de paginación:
+   *   meta.total  = count(filters)
+   *   meta.pages  = ceil(total / limit)
+   *
+   * Usamos prisma.property.count en lugar de findMany para evitar
+   * traer todos los registros a memoria solo para contarlos.
+   */
+  async count(filters?: PropertyFilters): Promise<number> {
+    const where = buildWhereClause(filters);
+ 
+    return prisma.property.count({ where });
+  },
+ 
   /**
    * Busca una propiedad por ID.
    */
@@ -139,23 +167,23 @@ export const propertyRepository = {
     const property = await prisma.property.findUnique({
       where: { id },
     });
-
+ 
     return property ? toProperty(property) : null;
   },
-
+ 
   /**
    * Crea una nueva propiedad.
    */
   async create(data: CreatePropertyInput): Promise<Property> {
     const prismaData = toPrismaData(data);
-
+ 
     const property = await prisma.property.create({
       data: prismaData as Parameters<typeof prisma.property.create>[0]['data'],
     });
-
+ 
     return toProperty(property);
   },
-
+ 
   /**
    * Actualiza una propiedad existente.
    */
@@ -163,28 +191,28 @@ export const propertyRepository = {
     // Verificamos que existe
     const existing = await prisma.property.findUnique({ where: { id } });
     if (!existing) return null;
-
+ 
     const prismaData = toPrismaData(data);
-
+ 
     const property = await prisma.property.update({
       where: { id },
       data: prismaData,
     });
-
+ 
     return toProperty(property);
   },
-
+ 
   /**
    * Elimina una propiedad.
    */
   async delete(id: string): Promise<boolean> {
     const existing = await prisma.property.findUnique({ where: { id } });
     if (!existing) return false;
-
+ 
     await prisma.property.delete({ where: { id } });
     return true;
   },
-
+ 
   /**
    * Verifica si una propiedad existe.
    */
@@ -196,27 +224,27 @@ export const propertyRepository = {
     return property !== null;
   },
 };
-
+ 
 // =============================================================================
 // HELPERS
 // =============================================================================
-
+ 
 /**
  * Construye la cláusula WHERE de Prisma a partir de los filtros.
  */
 function buildWhereClause(filters?: PropertyFilters): Record<string, unknown> {
   if (!filters) return {};
-
+ 
   const where: Record<string, unknown> = {};
-
+ 
   if (filters.propertyType) {
     where.propertyType = filters.propertyType;
   }
-
+ 
   if (filters.operationType) {
     where.operationType = filters.operationType;
   }
-
+ 
   if (filters.minPrice !== undefined || filters.maxPrice !== undefined) {
     where.price = {};
     if (filters.minPrice !== undefined) {
@@ -226,15 +254,15 @@ function buildWhereClause(filters?: PropertyFilters): Record<string, unknown> {
       (where.price as Record<string, number>).lte = filters.maxPrice;
     }
   }
-
+ 
   if (filters.minBedrooms !== undefined) {
     where.bedrooms = { gte: filters.minBedrooms };
   }
-
+ 
   if (filters.city) {
     where.city = { contains: filters.city };
   }
-
+ 
   // Búsqueda por texto en múltiples campos
   if (filters.search) {
     where.OR = [
@@ -244,9 +272,9 @@ function buildWhereClause(filters?: PropertyFilters): Record<string, unknown> {
       { city: { contains: filters.search } },
     ];
   }
-
+ 
   return where;
 }
-
+ 
 // Export por defecto para compatibilidad
 export default propertyRepository;

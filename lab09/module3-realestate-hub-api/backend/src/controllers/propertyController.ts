@@ -22,20 +22,90 @@
 //   Controller (maneja HTTP y lógica de negocio)
 //   Repository (abstrae Prisma/base de datos)
 // =============================================================================
-
+ 
 import type { Request, Response } from 'express';
 import { createPropertySchema, updatePropertySchema, type PropertyFilters } from '../types/property.js';
 import { propertyRepository } from '../repositories/propertyRepository.js';
-
+ 
 // =============================================================================
-// GET /api/properties - Listar propiedades con filtros
+// HELPERS DE PAGINACIÓN
+// =============================================================================
+ 
+interface PaginationParams {
+  page: number;
+  limit: number;
+}
+ 
+/**
+ * Parsea y valida los query params de paginación.
+ * Retorna null si algún valor es inválido.
+ */
+function parsePaginationParams(query: Request['query']): PaginationParams | null {
+  const rawPage = query.page ?? '1';
+  const rawLimit = query.limit ?? '10';
+ 
+  // Deben ser strings numéricos (no decimales, no texto)
+  const pageStr = String(rawPage);
+  const limitStr = String(rawLimit);
+ 
+  if (!/^\d+$/.test(pageStr) || !/^\d+$/.test(limitStr)) {
+    return null;
+  }
+ 
+  const page = parseInt(pageStr, 10);
+  const limit = parseInt(limitStr, 10);
+ 
+  // Rechazar valores negativos, cero o no numéricos
+  if (page <= 0 || limit <= 0) {
+    return null;
+  }
+ 
+  // Limitar el máximo de items por página para proteger el servidor
+  if (limit > 100) {
+    return null;
+  }
+ 
+  return { page, limit };
+}
+ 
+// =============================================================================
+// GET /api/properties - Listar propiedades con filtros + paginación
 // =============================================================================
 // Reemplaza: localStorage.getItem('properties')
+//
+// Query params de paginación:
+// - page:  Número de página (default: 1)
+// - limit: Items por página (default: 10, máximo: 100)
+//
+// Respuesta:
+// {
+//   success: true,
+//   data: [...],
+//   meta: { total, page, limit, pages }
+// }
 // =============================================================================
-
+ 
 export async function getAllProperties(req: Request, res: Response): Promise<void> {
   try {
-    // Extraemos filtros de los query params
+    // --- Validar parámetros de paginación ---
+    const pagination = parsePaginationParams(req.query);
+ 
+    if (!pagination) {
+      res.status(400).json({
+        success: false,
+        error: {
+          message:
+            'Parámetros de paginación inválidos. ' +
+            '"page" y "limit" deben ser enteros positivos. El límite máximo es 100.',
+          code: 'INVALID_PAGINATION',
+        },
+      });
+      return;
+    }
+ 
+    const { page, limit } = pagination;
+ 
+    // --- Extraer filtros de los query params ---
     const filters: PropertyFilters = {
       search: req.query.search as string | undefined,
       propertyType: req.query.propertyType as PropertyFilters['propertyType'],
@@ -45,13 +115,36 @@ export async function getAllProperties(req: Request, res: Response): Promise<voi
       minBedrooms: req.query.minBedrooms ? Number(req.query.minBedrooms) : undefined,
       city: req.query.city as string | undefined,
     };
-
-    // Delegamos al repositorio
-    const properties = await propertyRepository.findAll(filters);
-
+ 
+    // --- Obtener total de registros (con filtros aplicados) ---
+    const total = await propertyRepository.count(filters);
+ 
+    // --- Calcular metadatos de paginación ---
+    const pages = Math.ceil(total / limit);
+    const offset = (page - 1) * limit;
+ 
+    // --- Página fuera de rango → array vacío (no error) ---
+    if (total > 0 && page > pages) {
+      res.json({
+        success: true,
+        data: [],
+        meta: { total, page, limit, pages },
+      });
+      return;
+    }
+ 
+    // --- Obtener registros paginados ---
+    const properties = await propertyRepository.findAll(filters, { limit, offset });
+ 
     res.json({
       success: true,
       data: properties,
+      meta: {
+        total,
+        page,
+        limit,
+        pages,
+      },
     });
   } catch (error) {
     console.error('Error al obtener propiedades:', error);
@@ -64,17 +157,17 @@ export async function getAllProperties(req: Request, res: Response): Promise<voi
     });
   }
 }
-
+ 
 // =============================================================================
 // GET /api/properties/:id - Obtener una propiedad por ID
 // =============================================================================
-
+ 
 export async function getPropertyById(req: Request, res: Response): Promise<void> {
   try {
     const { id } = req.params;
-
+ 
     const property = await propertyRepository.findById(id);
-
+ 
     if (!property) {
       res.status(404).json({
         success: false,
@@ -85,7 +178,7 @@ export async function getPropertyById(req: Request, res: Response): Promise<void
       });
       return;
     }
-
+ 
     res.json({
       success: true,
       data: property,
@@ -101,18 +194,18 @@ export async function getPropertyById(req: Request, res: Response): Promise<void
     });
   }
 }
-
+ 
 // =============================================================================
 // POST /api/properties - Crear una nueva propiedad
 // =============================================================================
 // Reemplaza: localStorage.setItem('properties', ...)
 // =============================================================================
-
+ 
 export async function createProperty(req: Request, res: Response): Promise<void> {
   try {
     // Validamos el body con Zod
     const validationResult = createPropertySchema.safeParse(req.body);
-
+ 
     if (!validationResult.success) {
       res.status(400).json({
         success: false,
@@ -124,10 +217,10 @@ export async function createProperty(req: Request, res: Response): Promise<void>
       });
       return;
     }
-
+ 
     // Delegamos la creación al repositorio
     const property = await propertyRepository.create(validationResult.data);
-
+ 
     res.status(201).json({
       success: true,
       data: property,
@@ -143,18 +236,18 @@ export async function createProperty(req: Request, res: Response): Promise<void>
     });
   }
 }
-
+ 
 // =============================================================================
 // PUT /api/properties/:id - Actualizar una propiedad
 // =============================================================================
-
+ 
 export async function updateProperty(req: Request, res: Response): Promise<void> {
   try {
     const { id } = req.params;
-
+ 
     // Validamos el body
     const validationResult = updatePropertySchema.safeParse(req.body);
-
+ 
     if (!validationResult.success) {
       res.status(400).json({
         success: false,
@@ -166,10 +259,10 @@ export async function updateProperty(req: Request, res: Response): Promise<void>
       });
       return;
     }
-
+ 
     // Delegamos la actualización al repositorio
     const property = await propertyRepository.update(id, validationResult.data);
-
+ 
     if (!property) {
       res.status(404).json({
         success: false,
@@ -180,7 +273,7 @@ export async function updateProperty(req: Request, res: Response): Promise<void>
       });
       return;
     }
-
+ 
     res.json({
       success: true,
       data: property,
@@ -196,18 +289,18 @@ export async function updateProperty(req: Request, res: Response): Promise<void>
     });
   }
 }
-
+ 
 // =============================================================================
 // DELETE /api/properties/:id - Eliminar una propiedad
 // =============================================================================
-
+ 
 export async function deleteProperty(req: Request, res: Response): Promise<void> {
   try {
     const { id } = req.params;
-
+ 
     // Delegamos la eliminación al repositorio
     const deleted = await propertyRepository.delete(id);
-
+ 
     if (!deleted) {
       res.status(404).json({
         success: false,
@@ -218,7 +311,7 @@ export async function deleteProperty(req: Request, res: Response): Promise<void>
       });
       return;
     }
-
+ 
     res.json({
       success: true,
       data: { message: 'Propiedad eliminada correctamente' },
@@ -234,3 +327,4 @@ export async function deleteProperty(req: Request, res: Response): Promise<void>
     });
   }
 }
+ 
