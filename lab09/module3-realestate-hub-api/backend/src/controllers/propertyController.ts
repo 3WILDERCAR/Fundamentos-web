@@ -7,20 +7,6 @@
 // Separamos responsabilidades:
 // - Controller: Maneja HTTP (req/res), validación, respuestas
 // - Repository: Acceso a datos (Prisma), queries, transformaciones
-//
-// Esto facilita:
-// - Testing (mock del repositorio)
-// - Cambiar base de datos sin modificar controladores
-// - Mantener controladores enfocados en HTTP
-//
-// ## Comparación con Android (MVVM)
-// Android:
-//   Controller ≈ ViewModel (maneja lógica de UI)
-//   Repository = Repository (acceso a datos)
-//
-// Express:
-//   Controller (maneja HTTP y lógica de negocio)
-//   Repository (abstrae Prisma/base de datos)
 // =============================================================================
  
 import type { Request, Response } from 'express';
@@ -44,7 +30,6 @@ function parsePaginationParams(query: Request['query']): PaginationParams | null
   const rawPage = query.page ?? '1';
   const rawLimit = query.limit ?? '10';
  
-  // Deben ser strings numéricos (no decimales, no texto)
   const pageStr = String(rawPage);
   const limitStr = String(rawLimit);
  
@@ -55,12 +40,10 @@ function parsePaginationParams(query: Request['query']): PaginationParams | null
   const page = parseInt(pageStr, 10);
   const limit = parseInt(limitStr, 10);
  
-  // Rechazar valores negativos, cero o no numéricos
   if (page <= 0 || limit <= 0) {
     return null;
   }
  
-  // Limitar el máximo de items por página para proteger el servidor
   if (limit > 100) {
     return null;
   }
@@ -71,23 +54,9 @@ function parsePaginationParams(query: Request['query']): PaginationParams | null
 // =============================================================================
 // GET /api/properties - Listar propiedades con filtros + paginación
 // =============================================================================
-// Reemplaza: localStorage.getItem('properties')
-//
-// Query params de paginación:
-// - page:  Número de página (default: 1)
-// - limit: Items por página (default: 10, máximo: 100)
-//
-// Respuesta:
-// {
-//   success: true,
-//   data: [...],
-//   meta: { total, page, limit, pages }
-// }
-// =============================================================================
  
 export async function getAllProperties(req: Request, res: Response): Promise<void> {
   try {
-    // --- Validar parámetros de paginación ---
     const pagination = parsePaginationParams(req.query);
  
     if (!pagination) {
@@ -105,7 +74,6 @@ export async function getAllProperties(req: Request, res: Response): Promise<voi
  
     const { page, limit } = pagination;
  
-    // --- Extraer filtros de los query params ---
     const filters: PropertyFilters = {
       search: req.query.search as string | undefined,
       propertyType: req.query.propertyType as PropertyFilters['propertyType'],
@@ -116,14 +84,10 @@ export async function getAllProperties(req: Request, res: Response): Promise<voi
       city: req.query.city as string | undefined,
     };
  
-    // --- Obtener total de registros (con filtros aplicados) ---
     const total = await propertyRepository.count(filters);
- 
-    // --- Calcular metadatos de paginación ---
     const pages = Math.ceil(total / limit);
     const offset = (page - 1) * limit;
  
-    // --- Página fuera de rango → array vacío (no error) ---
     if (total > 0 && page > pages) {
       res.json({
         success: true,
@@ -133,27 +97,56 @@ export async function getAllProperties(req: Request, res: Response): Promise<voi
       return;
     }
  
-    // --- Obtener registros paginados ---
     const properties = await propertyRepository.findAll(filters, { limit, offset });
  
     res.json({
       success: true,
       data: properties,
-      meta: {
-        total,
-        page,
-        limit,
-        pages,
-      },
+      meta: { total, page, limit, pages },
     });
   } catch (error) {
     console.error('Error al obtener propiedades:', error);
     res.status(500).json({
       success: false,
-      error: {
-        message: 'Error interno del servidor',
-        code: 'INTERNAL_ERROR',
-      },
+      error: { message: 'Error interno del servidor', code: 'INTERNAL_ERROR' },
+    });
+  }
+}
+ 
+// =============================================================================
+// GET /api/properties/stats - Estadísticas de propiedades
+// =============================================================================
+// Devuelve:
+// {
+//   success: true,
+//   data: {
+//     total: 5,
+//     priceRange: { min: 650, max: 850000 },
+//     byType: {
+//       casa:        { count: 2, averagePrice: 550000 },
+//       apartamento: { count: 2, averagePrice: 925 },
+//       oficina:     { count: 1, averagePrice: 3500 },
+//     }
+//   }
+// }
+//
+// IMPORTANTE: Esta ruta debe registrarse ANTES de /:id en propertyRoutes.ts
+// para que Express no interprete "stats" como un ID.
+// =============================================================================
+ 
+export async function getPropertyStats(req: Request, res: Response): Promise<void> {
+  try {
+    const stats = await propertyRepository.getStats();
+ 
+    res.json({
+      success: true,
+      data: stats,
+    });
+  } catch (error) {
+    console.error('Error al obtener estadísticas:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Error interno del servidor', code: 'INTERNAL_ERROR' },
     });
   }
 }
@@ -171,26 +164,17 @@ export async function getPropertyById(req: Request, res: Response): Promise<void
     if (!property) {
       res.status(404).json({
         success: false,
-        error: {
-          message: 'Propiedad no encontrada',
-          code: 'NOT_FOUND',
-        },
+        error: { message: 'Propiedad no encontrada', code: 'NOT_FOUND' },
       });
       return;
     }
  
-    res.json({
-      success: true,
-      data: property,
-    });
+    res.json({ success: true, data: property });
   } catch (error) {
     console.error('Error al obtener propiedad:', error);
     res.status(500).json({
       success: false,
-      error: {
-        message: 'Error interno del servidor',
-        code: 'INTERNAL_ERROR',
-      },
+      error: { message: 'Error interno del servidor', code: 'INTERNAL_ERROR' },
     });
   }
 }
@@ -198,12 +182,9 @@ export async function getPropertyById(req: Request, res: Response): Promise<void
 // =============================================================================
 // POST /api/properties - Crear una nueva propiedad
 // =============================================================================
-// Reemplaza: localStorage.setItem('properties', ...)
-// =============================================================================
  
 export async function createProperty(req: Request, res: Response): Promise<void> {
   try {
-    // Validamos el body con Zod
     const validationResult = createPropertySchema.safeParse(req.body);
  
     if (!validationResult.success) {
@@ -218,21 +199,14 @@ export async function createProperty(req: Request, res: Response): Promise<void>
       return;
     }
  
-    // Delegamos la creación al repositorio
     const property = await propertyRepository.create(validationResult.data);
  
-    res.status(201).json({
-      success: true,
-      data: property,
-    });
+    res.status(201).json({ success: true, data: property });
   } catch (error) {
     console.error('Error al crear propiedad:', error);
     res.status(500).json({
       success: false,
-      error: {
-        message: 'Error interno del servidor',
-        code: 'INTERNAL_ERROR',
-      },
+      error: { message: 'Error interno del servidor', code: 'INTERNAL_ERROR' },
     });
   }
 }
@@ -245,7 +219,6 @@ export async function updateProperty(req: Request, res: Response): Promise<void>
   try {
     const { id } = req.params;
  
-    // Validamos el body
     const validationResult = updatePropertySchema.safeParse(req.body);
  
     if (!validationResult.success) {
@@ -260,32 +233,22 @@ export async function updateProperty(req: Request, res: Response): Promise<void>
       return;
     }
  
-    // Delegamos la actualización al repositorio
     const property = await propertyRepository.update(id, validationResult.data);
  
     if (!property) {
       res.status(404).json({
         success: false,
-        error: {
-          message: 'Propiedad no encontrada',
-          code: 'NOT_FOUND',
-        },
+        error: { message: 'Propiedad no encontrada', code: 'NOT_FOUND' },
       });
       return;
     }
  
-    res.json({
-      success: true,
-      data: property,
-    });
+    res.json({ success: true, data: property });
   } catch (error) {
     console.error('Error al actualizar propiedad:', error);
     res.status(500).json({
       success: false,
-      error: {
-        message: 'Error interno del servidor',
-        code: 'INTERNAL_ERROR',
-      },
+      error: { message: 'Error interno del servidor', code: 'INTERNAL_ERROR' },
     });
   }
 }
@@ -298,33 +261,22 @@ export async function deleteProperty(req: Request, res: Response): Promise<void>
   try {
     const { id } = req.params;
  
-    // Delegamos la eliminación al repositorio
     const deleted = await propertyRepository.delete(id);
  
     if (!deleted) {
       res.status(404).json({
         success: false,
-        error: {
-          message: 'Propiedad no encontrada',
-          code: 'NOT_FOUND',
-        },
+        error: { message: 'Propiedad no encontrada', code: 'NOT_FOUND' },
       });
       return;
     }
  
-    res.json({
-      success: true,
-      data: { message: 'Propiedad eliminada correctamente' },
-    });
+    res.json({ success: true, data: { message: 'Propiedad eliminada correctamente' } });
   } catch (error) {
     console.error('Error al eliminar propiedad:', error);
     res.status(500).json({
       success: false,
-      error: {
-        message: 'Error interno del servidor',
-        code: 'INTERNAL_ERROR',
-      },
+      error: { message: 'Error interno del servidor', code: 'INTERNAL_ERROR' },
     });
   }
 }
- 

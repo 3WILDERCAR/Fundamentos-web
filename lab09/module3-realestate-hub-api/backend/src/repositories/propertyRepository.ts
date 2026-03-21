@@ -21,6 +21,7 @@
 //   class PropertyRepository {
 //       async findAll(filters, pagination): Promise<Property[]>
 //       async count(filters): Promise<number>
+//       async getStats(): Promise<PropertyStats>
 //       async create(data): Promise<Property>
 //   }
 // =============================================================================
@@ -31,9 +32,6 @@ import type { Property, PropertyFilters, CreatePropertyInput, UpdatePropertyInpu
  
 // =============================================================================
 // CLIENTE PRISMA (Singleton con Adapter para Prisma 7)
-// =============================================================================
-// En Prisma 7, se requiere un driver adapter para conectar a la base de datos.
-// Usamos @prisma/adapter-better-sqlite3 para SQLite.
 // =============================================================================
  
 const adapter = new PrismaBetterSqlite3({ url: 'file:./prisma/dev.db' });
@@ -66,16 +64,29 @@ interface PaginationOptions {
   offset: number;
 }
  
+// Estadísticas por tipo de propiedad
+interface PropertyTypeStats {
+  count: number;
+  averagePrice: number;
+}
+ 
+// Respuesta completa del endpoint de estadísticas
+export interface PropertyStats {
+  total: number;
+  priceRange: {
+    min: number;
+    max: number;
+  };
+  byType: Record<string, PropertyTypeStats>;
+}
+ 
 // =============================================================================
 // TRANSFORMADORES
 // =============================================================================
  
 /**
  * Transforma un registro de Prisma al tipo Property de la API.
- *
- * ## ¿Por qué transformar?
- * Prisma almacena arrays como JSON strings en SQLite.
- * La API debe devolver arrays JavaScript.
+ * Prisma almacena arrays como JSON strings en SQLite → los parseamos.
  */
 function toProperty(dbProperty: PrismaProperty): Property {
   return {
@@ -117,18 +128,9 @@ function toPrismaData(data: CreatePropertyInput | UpdatePropertyInput): Record<s
 // REPOSITORIO
 // =============================================================================
  
-/**
- * Repositorio de propiedades.
- *
- * Centraliza todas las operaciones de base de datos relacionadas con propiedades.
- * El controlador solo llama métodos del repositorio, no interactúa con Prisma directamente.
- */
 export const propertyRepository = {
   /**
    * Busca propiedades con filtros opcionales y paginación.
-   *
-   * @param filters  - Criterios de búsqueda (propertyType, city, precio, etc.)
-   * @param pagination - { limit, offset } para paginar. Si se omite, devuelve todo.
    */
   async findAll(filters?: PropertyFilters, pagination?: PaginationOptions): Promise<Property[]> {
     const where = buildWhereClause(filters);
@@ -136,7 +138,6 @@ export const propertyRepository = {
     const properties = await prisma.property.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      // take y skip son ignorados por Prisma si son undefined → sin paginación
       take: pagination?.limit,
       skip: pagination?.offset,
     });
@@ -146,28 +147,71 @@ export const propertyRepository = {
  
   /**
    * Cuenta el total de propiedades que coinciden con los filtros.
-   *
-   * Se usa junto con findAll para construir los metadatos de paginación:
-   *   meta.total  = count(filters)
-   *   meta.pages  = ceil(total / limit)
-   *
-   * Usamos prisma.property.count en lugar de findMany para evitar
-   * traer todos los registros a memoria solo para contarlos.
    */
   async count(filters?: PropertyFilters): Promise<number> {
     const where = buildWhereClause(filters);
- 
     return prisma.property.count({ where });
+  },
+ 
+  /**
+   * Calcula estadísticas globales de propiedades.
+   *
+   * Usa dos queries de Prisma:
+   * - groupBy:    agrupa por propertyType → count + avg por tipo
+   * - aggregate:  min, max y total global
+   *
+   * Si la BD está vacía devuelve zeros, nunca lanza error.
+   *
+   * Ejemplo de respuesta:
+   * {
+   *   total: 5,
+   *   priceRange: { min: 650, max: 850000 },
+   *   byType: {
+   *     casa:        { count: 2, averagePrice: 550000 },
+   *     apartamento: { count: 2, averagePrice: 925 },
+   *     oficina:     { count: 1, averagePrice: 3500 },
+   *   }
+   * }
+   */
+  async getStats(): Promise<PropertyStats> {
+    // Query 1: agrupar por tipo → count + precio promedio por tipo
+    const grouped = await prisma.property.groupBy({
+      by: ['propertyType'],
+      _count: { id: true },
+      _avg: { price: true },
+    });
+ 
+    // Query 2: totales globales → count total + precio min/max
+    const aggregate = await prisma.property.aggregate({
+      _count: { id: true },
+      _min: { price: true },
+      _max: { price: true },
+    });
+ 
+    // Transformar el array de groupBy a un objeto indexado por tipo
+    const byType: Record<string, PropertyTypeStats> = {};
+    for (const group of grouped) {
+      byType[group.propertyType] = {
+        count: group._count.id,
+        averagePrice: Math.round(group._avg.price ?? 0),
+      };
+    }
+ 
+    return {
+      total: aggregate._count.id,
+      priceRange: {
+        min: aggregate._min.price ?? 0,
+        max: aggregate._max.price ?? 0,
+      },
+      byType,
+    };
   },
  
   /**
    * Busca una propiedad por ID.
    */
   async findById(id: string): Promise<Property | null> {
-    const property = await prisma.property.findUnique({
-      where: { id },
-    });
- 
+    const property = await prisma.property.findUnique({ where: { id } });
     return property ? toProperty(property) : null;
   },
  
@@ -188,7 +232,6 @@ export const propertyRepository = {
    * Actualiza una propiedad existente.
    */
   async update(id: string, data: UpdatePropertyInput): Promise<Property | null> {
-    // Verificamos que existe
     const existing = await prisma.property.findUnique({ where: { id } });
     if (!existing) return null;
  
@@ -263,7 +306,6 @@ function buildWhereClause(filters?: PropertyFilters): Record<string, unknown> {
     where.city = { contains: filters.city };
   }
  
-  // Búsqueda por texto en múltiples campos
   if (filters.search) {
     where.OR = [
       { title: { contains: filters.search } },

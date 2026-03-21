@@ -4,21 +4,23 @@
 // Define las rutas (endpoints) de la API de propiedades.
 //
 // ## Diseño RESTful
-// Seguimos convenciones REST para los endpoints:
-// - GET /api/properties - Listar todas (con paginación)
-// - GET /api/properties/:id - Obtener una
-// - POST /api/properties - Crear nueva
-// - PUT /api/properties/:id - Actualizar
-// - DELETE /api/properties/:id - Eliminar
+// - GET /api/properties         - Listar todas (con paginación)
+// - GET /api/properties/stats   - Estadísticas globales   ← NUEVO
+// - GET /api/properties/:id     - Obtener una
+// - POST /api/properties        - Crear nueva
+// - PUT /api/properties/:id     - Actualizar
+// - DELETE /api/properties/:id  - Eliminar
 //
-// ## Express Router
-// Usamos Router() para modularizar las rutas.
-// Cada recurso (properties, users, etc.) tendría su propio archivo.
+// ## ORDEN IMPORTA
+// /stats debe ir registrada ANTES de /:id.
+// Si /:id va primero, Express interpretaría /stats como id="stats"
+// y nunca llegaría al handler correcto.
 // =============================================================================
  
 import { Router } from 'express';
 import {
   getAllProperties,
+  getPropertyStats,
   getPropertyById,
   createProperty,
   updateProperty,
@@ -28,7 +30,7 @@ import {
 const router = Router();
  
 // =============================================================================
-// RUTAS CRUD
+// RUTAS
 // =============================================================================
  
 /**
@@ -40,32 +42,32 @@ const router = Router();
  * - limit:       Items por página, máximo 100 (default: 10)
  *
  * Query params — Filtros:
- * - search:        Búsqueda por texto
- * - propertyType:  Filtro por tipo de propiedad
- * - operationType: Filtro por tipo de operación
- * - minPrice:      Precio mínimo
- * - maxPrice:      Precio máximo
- * - minBedrooms:   Habitaciones mínimas
- * - city:          Filtro por ciudad
- *
- * Respuesta exitosa:
- * {
- *   success: true,
- *   data: Property[],
- *   meta: {
- *     total: number,   // total de registros que coinciden con los filtros
- *     page: number,    // página actual
- *     limit: number,   // items por página
- *     pages: number,   // total de páginas = ceil(total / limit)
- *   }
- * }
- *
- * Ejemplos:
- *   GET /api/properties?page=2&limit=5
- *   GET /api/properties?page=1&limit=20&city=Madrid&minPrice=100000
+ * - search, propertyType, operationType, minPrice, maxPrice, minBedrooms, city
  */
 router.get('/', (req, res) => {
   void getAllProperties(req, res);
+});
+ 
+/**
+ * GET /api/properties/stats
+ * Devuelve estadísticas globales de propiedades.
+ *
+ * Respuesta:
+ * {
+ *   success: true,
+ *   data: {
+ *     total: number,
+ *     priceRange: { min: number, max: number },
+ *     byType: {
+ *       [tipo]: { count: number, averagePrice: number }
+ *     }
+ *   }
+ * }
+ *
+ * NOTA: debe ir antes de /:id para que Express no confunda "stats" con un ID.
+ */
+router.get('/stats', (req, res) => {
+  void getPropertyStats(req, res);
 });
  
 /**
@@ -79,8 +81,6 @@ router.get('/:id', (req, res) => {
 /**
  * POST /api/properties
  * Crea una nueva propiedad.
- *
- * Body: CreatePropertyInput
  */
 router.post('/', (req, res) => {
   void createProperty(req, res);
@@ -89,8 +89,6 @@ router.post('/', (req, res) => {
 /**
  * PUT /api/properties/:id
  * Actualiza una propiedad existente.
- *
- * Body: Partial<CreatePropertyInput>
  */
 router.put('/:id', (req, res) => {
   void updateProperty(req, res);
@@ -105,4 +103,3 @@ router.delete('/:id', (req, res) => {
 });
  
 export default router;
- 
