@@ -18,16 +18,17 @@ import { createEventAction, updateEventAction } from '@/actions/eventActions';
 import { generateEventDetailsAction, generateEventPosterAction } from '@/actions/aiActions';
 import { EVENT_CATEGORIES, EVENT_STATUSES, CATEGORY_LABELS, STATUS_LABELS } from '@/types/event';
 import type { FormState, Event } from '@/types/event';
-import { Sparkles } from 'lucide-react';
-import { useState } from 'react';
+import { Sparkles, RefreshCw, CheckCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import type { Tone } from '@/lib/gemini';
 
 interface EventFormProps {
   event?: Event;
   mode?: 'create' | 'edit';
+  action?: any;
 }
 
 const initialState: FormState = {
@@ -35,18 +36,108 @@ const initialState: FormState = {
   message: '',
 };
 
-function MagicGenerateButton({ onGenerate, onStart, onEnd }: { onGenerate: (data: any) => void, onStart: () => void, onEnd: () => void }) {
-  const [isGenerating, setIsGenerating] = useState(false);
+const TONE_LABELS: Record<Tone, string> = {
+  formal: '🎩 Formal',
+  informal: '😊 Informal',
+  emocionante: '🔥 Emocionante',
+};
 
-  const handleGenerate = async () => {
+// =============================================================================
+// VARIANTES DE DESCRIPCIÓN
+// =============================================================================
+function DescriptionVariants({
+  variants,
+  onSelect,
+  onRegenerate,
+  isRegenerating,
+}: {
+  variants: string[];
+  onSelect: (desc: string) => void;
+  onRegenerate: () => void;
+  isRegenerating: boolean;
+}) {
+  const [selected, setSelected] = useState<number | null>(null);
+
+  const handleSelect = (index: number) => {
+    setSelected(index);
+    onSelect(variants[index]);
+  };
+
+  return (
+    <div className="space-y-3 mt-3">
+      <p className="text-sm font-medium text-muted-foreground">
+        Elige una variante o regénera:
+      </p>
+      {variants.map((desc, i) => (
+        <div
+          key={i}
+          onClick={() => handleSelect(i)}
+          className={`cursor-pointer rounded-lg border p-3 text-sm transition-all hover:border-primary ${
+            selected === i
+              ? 'border-primary bg-primary/5 ring-1 ring-primary'
+              : 'border-muted'
+          }`}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <p className="line-clamp-3 text-muted-foreground">{desc}</p>
+            {selected === i && (
+              <CheckCircle className="h-4 w-4 shrink-0 text-primary" />
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="mt-2 h-7 text-xs"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleSelect(i);
+            }}
+          >
+            Aplicar esta
+          </Button>
+        </div>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={onRegenerate}
+        disabled={isRegenerating}
+        className="gap-2"
+      >
+        <RefreshCw className={`h-3 w-3 ${isRegenerating ? 'animate-spin' : ''}`} />
+        {isRegenerating ? 'Regenerando...' : 'Regenerar variantes'}
+      </Button>
+    </div>
+  );
+}
+
+// =============================================================================
+// BOTÓN GENERAR CON IA
+// =============================================================================
+function MagicGenerateButton({
+  onGenerate,
+  onStart,
+  onEnd,
+}: {
+  onGenerate: (data: any) => void;
+  onStart: () => void;
+  onEnd: () => void;
+}) {
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [tone, setTone] = useState<Tone>('formal');
+  const [variants, setVariants] = useState<string[]>([]);
+
+  const generate = async () => {
     const titleInput = document.getElementById('title') as HTMLInputElement;
     const title = titleInput?.value;
 
     if (!title || title.length < 5) {
       toast({
-        title: "Error",
-        description: "Escribe un título descriptivo primero (mínimo 5 caracteres)",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Escribe un título descriptivo primero (mínimo 5 caracteres)',
+        variant: 'destructive',
       });
       return;
     }
@@ -54,26 +145,27 @@ function MagicGenerateButton({ onGenerate, onStart, onEnd }: { onGenerate: (data
     setIsGenerating(true);
     onStart();
     try {
-      const result = await generateEventDetailsAction(title);
+      const result = await generateEventDetailsAction(title, tone);
 
       if (result.success && result.data) {
+        setVariants(result.data.descriptions);
         onGenerate(result.data);
         toast({
-          title: "✨ Magia Generada",
-          description: "Se han completado los detalles con ayuda de Gemini AI.",
+          title: '✨ Variantes Generadas',
+          description: '3 descripciones listas. Elige tu favorita.',
         });
       } else {
         toast({
-          title: "Error",
-          description: result.error || "No se pudo generar el contenido",
-          variant: "destructive"
+          title: 'Error',
+          description: result.error || 'No se pudo generar el contenido',
+          variant: 'destructive',
         });
       }
-    } catch (error) {
+    } catch {
       toast({
-        title: "Error",
-        description: "Ocurrió un error inesperado",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Ocurrió un error inesperado',
+        variant: 'destructive',
       });
     } finally {
       setIsGenerating(false);
@@ -81,22 +173,68 @@ function MagicGenerateButton({ onGenerate, onStart, onEnd }: { onGenerate: (data
     }
   };
 
+  const handleSelectVariant = (desc: string) => {
+    const descInput = document.getElementById('description') as HTMLTextAreaElement;
+    if (descInput) descInput.value = desc;
+    toast({ title: '✅ Descripción aplicada' });
+  };
+
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="sm"
-      className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:text-primary"
-      onClick={handleGenerate}
-      disabled={isGenerating}
-    >
-      <Sparkles className={`h-4 w-4 mr-2 ${isGenerating ? 'animate-spin' : ''}`} />
-      {isGenerating ? 'Generando...' : 'Generar con IA'}
-    </Button>
+    <div className="space-y-2">
+      {/* Selector de tono */}
+      <div className="flex items-center gap-2">
+        <Label className="text-xs text-muted-foreground">Tono:</Label>
+        <Select value={tone} onValueChange={(v) => setTone(v as Tone)}>
+          <SelectTrigger className="h-7 w-40 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.keys(TONE_LABELS) as Tone[]).map((t) => (
+              <SelectItem key={t} value={t} className="text-xs">
+                {TONE_LABELS[t]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs text-muted-foreground hover:text-primary"
+          onClick={generate}
+          disabled={isGenerating}
+        >
+          <Sparkles className={`h-3 w-3 mr-1 ${isGenerating ? 'animate-spin' : ''}`} />
+          {isGenerating ? 'Generando...' : 'Generar con IA'}
+        </Button>
+      </div>
+
+      {/* Tarjetas de variantes */}
+      {variants.length > 0 && (
+        <DescriptionVariants
+          variants={variants}
+          onSelect={handleSelectVariant}
+          onRegenerate={generate}
+          isRegenerating={isGenerating}
+        />
+      )}
+    </div>
   );
 }
 
-function PosterGenerator({ onImageGenerated, onStart, onEnd }: { onImageGenerated: (url: string) => void, onStart?: () => void, onEnd?: () => void }) {
+// =============================================================================
+// POSTER GENERATOR
+// =============================================================================
+function PosterGenerator({
+  onImageGenerated,
+  onStart,
+  onEnd,
+}: {
+  onImageGenerated: (url: string) => void;
+  onStart?: () => void;
+  onEnd?: () => void;
+}) {
   const [isGenerating, setIsGenerating] = useState(false);
 
   const handleGenerate = async () => {
@@ -104,20 +242,20 @@ function PosterGenerator({ onImageGenerated, onStart, onEnd }: { onImageGenerate
     const descInput = document.getElementById('description') as HTMLTextAreaElement;
     const tagsInput = document.getElementById('tags') as HTMLInputElement;
 
-    // Use current values if available, otherwise just title + optional desc + tags
-    const prompt = `Title: ${titleInput?.value || ''}. Description: ${descInput?.value ? descInput.value.slice(0, 100) : ''}. Tags: ${tagsInput?.value || ''}`;
+    const prompt = `Title: ${titleInput?.value || ''}. Description: ${
+      descInput?.value ? descInput.value.slice(0, 100) : ''
+    }. Tags: ${tagsInput?.value || ''}`;
 
-    if (!prompt || prompt.length < 5) {
+    if (!titleInput?.value) {
       toast({
-        title: "Error",
-        description: "Primero completa el título para generar un poster.",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Primero completa el título para generar un poster.',
+        variant: 'destructive',
       });
       return;
     }
 
     setIsGenerating(true);
-    // Optionally block UI here too if desired, but sticking to requested blocking on text generation
     if (onStart) onStart();
 
     try {
@@ -125,23 +263,12 @@ function PosterGenerator({ onImageGenerated, onStart, onEnd }: { onImageGenerate
 
       if (result.success && result.imageUrl) {
         onImageGenerated(result.imageUrl);
-        toast({
-          title: "🎨 Poster Generado",
-          description: "Se ha generado y subido un nuevo poster.",
-        });
+        toast({ title: '🎨 Poster Generado', description: 'Se ha generado y subido un nuevo poster.' });
       } else {
-        toast({
-          title: "Error",
-          description: result.error || "No se pudo generar el poster",
-          variant: "destructive"
-        });
+        toast({ title: 'Error', description: result.error || 'No se pudo generar el poster', variant: 'destructive' });
       }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Ocurrió un error inesperado",
-        variant: "destructive",
-      });
+    } catch {
+      toast({ title: 'Error', description: 'Ocurrió un error inesperado', variant: 'destructive' });
     } finally {
       setIsGenerating(false);
       if (onEnd) onEnd();
@@ -163,58 +290,49 @@ function PosterGenerator({ onImageGenerated, onStart, onEnd }: { onImageGenerate
   );
 }
 
-function SubmitButton({ isEditing, isLoading }: { isEditing: boolean, isLoading: boolean }) {
+// =============================================================================
+// SUBMIT BUTTON
+// =============================================================================
+function SubmitButton({ isEditing, isLoading }: { isEditing: boolean; isLoading: boolean }) {
   const { pending } = useFormStatus();
-
   return (
     <Button type="submit" disabled={pending || isLoading} className="w-full">
       {pending
-        ? isEditing
-          ? 'Guardando cambios...'
-          : 'Creando evento...'
-        : isEditing
-          ? 'Guardar Cambios'
-          : 'Crear Evento'}
+        ? isEditing ? 'Guardando cambios...' : 'Creando evento...'
+        : isEditing ? 'Guardar Cambios' : 'Crear Evento'}
     </Button>
   );
 }
 
 function FieldError({ errors }: { errors?: string[] }) {
   if (!errors || errors.length === 0) return null;
-
   return (
     <div className="mt-1 text-sm text-destructive">
-      {errors.map((error, index) => (
-        <p key={index}>{error}</p>
-      ))}
+      {errors.map((error, index) => <p key={index}>{error}</p>)}
     </div>
   );
 }
 
 function toDatetimeLocal(isoString?: string): string {
   if (!isoString) return '';
-  const date = new Date(isoString);
-  return date.toISOString().slice(0, 16);
+  return new Date(isoString).toISOString().slice(0, 16);
 }
 
-export function EventForm({ event, mode = 'create' }: EventFormProps) {
+// =============================================================================
+// MAIN FORM
+// =============================================================================
+export function EventForm({ event, mode = 'create', action: actionProp }: EventFormProps) {
   const isEditing = mode === 'edit' && !!event;
   const [isAiGenerating, setIsAiGenerating] = useState(false);
   const [isPosterGenerating, setIsPosterGenerating] = useState(false);
-  const { user } = useAuth(); // Import useAuth from context
+  const { user } = useAuth();
   const router = useRouter();
 
-  const action = isEditing
-    ? updateEventAction.bind(null, event.id)
-    : createEventAction;
-
+  const action = actionProp || (isEditing ? updateEventAction.bind(null, event!.id) : createEventAction);
   const [state, formAction] = useActionState(action, initialState);
 
-  // Helper to get default value from state payload (if error) or initial event
   const getDefault = (key: string, fallback: any = '') => {
-    if (state.payload && state.payload[key] !== undefined) {
-      return state.payload[key];
-    }
+    if (state.payload && state.payload[key] !== undefined) return state.payload[key];
     return event ? (event as any)[key] : fallback;
   };
 
@@ -224,12 +342,8 @@ export function EventForm({ event, mode = 'create' }: EventFormProps) {
         title: isEditing ? 'Evento Actualizado' : 'Evento Creado',
         description: state.message,
       });
-
       if (isEditing && event) {
-        // Redirect to detail page after a short delay to let toast show
-        const timer = setTimeout(() => {
-          router.push(`/events/${event.id}`);
-        }, 1500);
+        const timer = setTimeout(() => router.push(`/events/${event.id}`), 1500);
         return () => clearTimeout(timer);
       }
     }
@@ -259,29 +373,24 @@ export function EventForm({ event, mode = 'create' }: EventFormProps) {
 
             <div className="space-y-2">
               <Label htmlFor="title">Título del evento *</Label>
-              <div className="relative">
-                <Input
-                  id="title"
-                  name="title"
-                  placeholder="Ej: Conferencia de Desarrollo Web 2025"
-                  defaultValue={getDefault('title')}
-                  required
-                />
-                {!isEditing && (
-                  <MagicGenerateButton
-                    onStart={() => setIsAiGenerating(true)}
-                    onEnd={() => setIsAiGenerating(false)}
-                    onGenerate={(data) => {
-                      const descInput = document.getElementById('description') as HTMLTextAreaElement;
-                      if (descInput) descInput.value = data.description;
-
-                      const tagsInput = document.getElementById('tags') as HTMLInputElement;
-                      if (tagsInput) tagsInput.value = data.tags.join(', ');
-                    }}
-                  />
-                )}
-              </div>
+              <Input
+                id="title"
+                name="title"
+                placeholder="Ej: Conferencia de Desarrollo Web 2025"
+                defaultValue={getDefault('title')}
+                required
+              />
               <FieldError errors={state.errors?.title} />
+              {!isEditing && (
+                <MagicGenerateButton
+                  onStart={() => setIsAiGenerating(true)}
+                  onEnd={() => setIsAiGenerating(false)}
+                  onGenerate={(data) => {
+                    const tagsInput = document.getElementById('tags') as HTMLInputElement;
+                    if (tagsInput) tagsInput.value = data.tags.join(', ');
+                  }}
+                />
+              )}
             </div>
 
             <div className="space-y-2">
@@ -291,7 +400,7 @@ export function EventForm({ event, mode = 'create' }: EventFormProps) {
                 name="description"
                 placeholder="Describe tu evento en detalle (mínimo 20 caracteres)"
                 defaultValue={getDefault('description')}
-                rows={4}
+                rows={5}
                 required
                 disabled={isAiGenerating}
                 className={isAiGenerating ? 'opacity-50 cursor-not-allowed bg-muted' : ''}
@@ -303,14 +412,10 @@ export function EventForm({ event, mode = 'create' }: EventFormProps) {
               <div className="space-y-2">
                 <Label htmlFor="category">Categoría *</Label>
                 <Select name="category" defaultValue={getDefault('category')}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona categoría" />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Selecciona categoría" /></SelectTrigger>
                   <SelectContent>
                     {EVENT_CATEGORIES.map((cat) => (
-                      <SelectItem key={cat} value={cat}>
-                        {CATEGORY_LABELS[cat]}
-                      </SelectItem>
+                      <SelectItem key={cat} value={cat}>{CATEGORY_LABELS[cat]}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -320,14 +425,10 @@ export function EventForm({ event, mode = 'create' }: EventFormProps) {
               <div className="space-y-2">
                 <Label htmlFor="status">Estado *</Label>
                 <Select name="status" defaultValue={getDefault('status', 'borrador')}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona estado" />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Selecciona estado" /></SelectTrigger>
                   <SelectContent>
                     {EVENT_STATUSES.map((status) => (
-                      <SelectItem key={status} value={status}>
-                        {STATUS_LABELS[status]}
-                      </SelectItem>
+                      <SelectItem key={status} value={status}>{STATUS_LABELS[status]}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -338,87 +439,41 @@ export function EventForm({ event, mode = 'create' }: EventFormProps) {
 
           <div className="space-y-4">
             <h3 className="text-lg font-medium">Fecha y Ubicación</h3>
-
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="date">Fecha de inicio *</Label>
-                <Input
-                  id="date"
-                  name="date"
-                  type="datetime-local"
-                  defaultValue={state.payload?.date || toDatetimeLocal(event?.date)}
-                  required
-                />
+                <Input id="date" name="date" type="datetime-local" defaultValue={state.payload?.date || toDatetimeLocal(event?.date)} required />
                 <FieldError errors={state.errors?.date} />
               </div>
-
               <div className="space-y-2">
                 <Label htmlFor="endDate">Fecha de fin</Label>
-                <Input
-                  id="endDate"
-                  name="endDate"
-                  type="datetime-local"
-                  defaultValue={state.payload?.endDate || toDatetimeLocal(event?.endDate)}
-                />
+                <Input id="endDate" name="endDate" type="datetime-local" defaultValue={state.payload?.endDate || toDatetimeLocal(event?.endDate)} />
                 <FieldError errors={state.errors?.endDate} />
               </div>
             </div>
-
             <div className="space-y-2">
               <Label htmlFor="location">Lugar *</Label>
-              <Input
-                id="location"
-                name="location"
-                placeholder="Ej: Centro de Convenciones"
-                defaultValue={getDefault('location')}
-                required
-              />
+              <Input id="location" name="location" placeholder="Ej: Centro de Convenciones" defaultValue={getDefault('location')} required />
               <FieldError errors={state.errors?.location} />
             </div>
-
             <div className="space-y-2">
               <Label htmlFor="address">Dirección completa *</Label>
-              <Input
-                id="address"
-                name="address"
-                placeholder="Ej: Calle Principal 123, 28001 Madrid"
-                defaultValue={getDefault('address')}
-                required
-              />
+              <Input id="address" name="address" placeholder="Ej: Calle Principal 123" defaultValue={getDefault('address')} required />
               <FieldError errors={state.errors?.address} />
             </div>
           </div>
 
           <div className="space-y-4">
             <h3 className="text-lg font-medium">Capacidad y Precio</h3>
-
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="capacity">Capacidad máxima *</Label>
-                <Input
-                  id="capacity"
-                  name="capacity"
-                  type="number"
-                  min="1"
-                  placeholder="100"
-                  defaultValue={getDefault('capacity')}
-                  required
-                />
+                <Input id="capacity" name="capacity" type="number" min="1" placeholder="100" defaultValue={getDefault('capacity')} required />
                 <FieldError errors={state.errors?.capacity} />
               </div>
-
               <div className="space-y-2">
                 <Label htmlFor="price">Precio ($) *</Label>
-                <Input
-                  id="price"
-                  name="price"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="0 para eventos gratuitos"
-                  defaultValue={getDefault('price')}
-                  required
-                />
+                <Input id="price" name="price" type="number" min="0" step="0.01" placeholder="0 para eventos gratuitos" defaultValue={getDefault('price')} required />
                 <FieldError errors={state.errors?.price} />
               </div>
             </div>
@@ -426,18 +481,9 @@ export function EventForm({ event, mode = 'create' }: EventFormProps) {
 
           <div className="space-y-4">
             <h3 className="text-lg font-medium">Imagen y Etiquetas</h3>
-
             <div className="space-y-2">
               <Label htmlFor="imageUrl">URL de imagen</Label>
-              <Input
-                id="imageUrl"
-                name="imageUrl"
-                type="url"
-                placeholder="https://ejemplo.com/imagen.jpg"
-                defaultValue={getDefault('imageUrl')}
-                disabled={isAiGenerating || isPosterGenerating}
-                className={isPosterGenerating ? 'opacity-50 cursor-not-allowed bg-muted' : ''}
-              />
+              <Input id="imageUrl" name="imageUrl" type="url" placeholder="https://ejemplo.com/imagen.jpg" defaultValue={getDefault('imageUrl')} disabled={isAiGenerating || isPosterGenerating} />
               <FieldError errors={state.errors?.imageUrl} />
               <div className="flex justify-end mt-2">
                 <PosterGenerator
@@ -446,28 +492,20 @@ export function EventForm({ event, mode = 'create' }: EventFormProps) {
                   onImageGenerated={(url) => {
                     const input = document.getElementById('imageUrl') as HTMLInputElement;
                     if (input) input.value = url;
-                  }} />
+                  }}
+                />
               </div>
             </div>
-
             <div className="space-y-2">
               <Label htmlFor="tags">Etiquetas (separadas por coma)</Label>
-              <Input
-                id="tags"
-                name="tags"
-                placeholder="react, javascript, conferencia"
-                defaultValue={state.payload?.tags ? state.payload.tags.join(', ') : event?.tags.join(', ')}
-              />
+              <Input id="tags" name="tags" placeholder="react, javascript, conferencia" defaultValue={state.payload?.tags ? state.payload.tags.join(', ') : event?.tags.join(', ')} />
               <p className="text-sm text-muted-foreground">Máximo 5 etiquetas</p>
               <FieldError errors={state.errors?.tags} />
             </div>
           </div>
 
-          {/* Hidden fields for organizer info, automatically populated */}
           <input type="hidden" name="organizerName" value={getDefault('organizerName', user?.displayName || 'Anónimo')} />
           <input type="hidden" name="organizerEmail" value={getDefault('organizerEmail', user?.email || '')} />
-          {state.errors?.organizerName && <FieldError errors={state.errors.organizerName} />}
-          {state.errors?.organizerEmail && <FieldError errors={state.errors.organizerEmail} />}
 
           <SubmitButton isEditing={isEditing} isLoading={isAiGenerating || isPosterGenerating} />
 
@@ -478,6 +516,6 @@ export function EventForm({ event, mode = 'create' }: EventFormProps) {
           )}
         </form>
       </CardContent>
-    </Card >
+    </Card>
   );
 }
