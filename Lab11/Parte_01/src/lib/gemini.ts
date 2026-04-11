@@ -34,43 +34,19 @@
 
 import { GoogleGenAI } from '@google/genai';
 
-// =============================================================================
-// INICIALIZACIÓN DEL CLIENTE
-// =============================================================================
-// Usamos el patrón Singleton para evitar crear múltiples instancias del cliente.
-// La API key se obtiene de las variables de entorno del servidor.
-// =============================================================================
-
 const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
-// =============================================================================
-// MODELOS DISPONIBLES
-// =============================================================================
-// Constantes para los modelos de Gemini. Usar constantes evita errores de typo
-// y facilita actualizar los modelos cuando Google lance nuevas versiones.
-// =============================================================================
-
 export const GEMINI_MODELS = {
-  /** Modelo de texto optimizado para velocidad - ideal para generación interactiva */
   TEXT: 'gemini-3-flash-preview',
-  /** Modelo de imagen con capacidades de generación visual */
   IMAGE: 'gemini-3-pro-image-preview',
 } as const;
 
-// =============================================================================
-// EXPORTACIÓN DEL CLIENTE
-// =============================================================================
-// Exportamos una función getter en lugar del cliente directamente.
-// Esto permite:
-// 1. Lazy initialization si fuera necesario
-// 2. Facilitar testing con mocks
-// 3. Agregar validaciones en el futuro
-// =============================================================================
+export const TONE_PROMPTS = {
+  formal: 'profesional y formal, usando lenguaje corporativo y estructurado',
+  informal: 'cercano e informal, como si hablaras con un amigo, usando lenguaje coloquial',
+  emocionante: 'dinámico y emocionante, con energía, usando verbos de acción y generando entusiasmo',
+} as const;
 
-/**
- * Obtiene el cliente de Gemini AI.
- * Solo debe usarse desde Server Actions o API Routes.
- */
-export const getGeminiClient = () => {
-  return genAI;
-};
+export type Tone = keyof typeof TONE_PROMPTS;
+
+export const getGeminiClient = () => genAI;
