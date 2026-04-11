@@ -53,138 +53,133 @@
 
 'use server';
 
-import { getGeminiClient, GEMINI_MODELS } from '@/lib/gemini';
+import { getGeminiClient, GEMINI_MODELS, TONE_PROMPTS, type Tone } from '@/lib/gemini';
 import { EVENT_CATEGORIES } from '@/types/event';
 
-// =============================================================================
-// TIPOS DE RESPUESTA
-// =============================================================================
-
 export interface GeneratedEventDetails {
-    description: string;
-    category: string;
-    tags: string[];
+  descriptions: string[];
+  category: string;
+  tags: string[];
 }
 
-export async function generateEventDetailsAction(title: string): Promise<{ success: boolean; data?: GeneratedEventDetails; error?: string }> {
-    try {
-        if (!process.env.GEMINI_API_KEY) {
-            throw new Error('GEMINI_API_KEY is not configured');
-        }
+export interface GeneratedEventDetailsLegacy {
+  description: string;
+  category: string;
+  tags: string[];
+}
 
-        if (!title || title.length < 3) {
-            return { success: false, error: 'Please provide a valid event title' };
-        }
+export async function generateEventDetailsAction(
+  title: string,
+  tone: Tone = 'formal'
+): Promise<{ success: boolean; data?: GeneratedEventDetails; error?: string }> {
+  try {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error('GEMINI_API_KEY no está configurada');
+    }
 
-        const client = getGeminiClient();
+    if (!title || title.length < 3) {
+      return { success: false, error: 'Por favor proporciona un título válido' };
+    }
 
-        const prompt = `
-      You are an expert event planner. Based on the event title "${title}", please generate:
-      1. A compelling and engaging description (2-3 paragraphs, MUST be under 1000 characters).
-      2. The most suitable category from this list: ${EVENT_CATEGORIES.join(', ')}.
-      3. A list of 5 relevant tags (lowercase, concise).
+    const client = getGeminiClient();
+    const toneDescription = TONE_PROMPTS[tone];
 
-      Return the response in strictly valid JSON format with this structure:
-      {
-        "description": "string",
-        "category": "string",
-        "tags": ["tag1", "tag2"]
-      }
-      Do not include any markdown formatting or explanations, just the JSON string.
+    const prompt = `
+Eres un experto organizador de eventos con más de 10 años de experiencia creando descripciones 
+persuasivas y atractivas para todo tipo de eventos en Latinoamérica.
+
+El título del evento es: "${title}"
+El tono debe ser: ${toneDescription}
+
+Tu tarea es generar 3 descripciones DIFERENTES y ÚNICAS para este evento. Cada descripción debe:
+- Tener una descripción clara y atractiva del evento que no pasen de los 1000 carácteres 
+- Estar escrita completamente en español
+- Usar el tono indicado de forma consistente
+- Destacar los beneficios para el asistente
+- Incluir un llamado a la acción al final
+- Ser completamente diferente a las otras dos en estructura y enfoque
+
+También determina:
+- La categoría más apropiada de esta lista: ${EVENT_CATEGORIES.join(', ')}
+- 5 etiquetas relevantes en minúsculas
+
+Responde ÚNICAMENTE con este JSON válido, sin markdown, sin explicaciones:
+{
+  "descriptions": [
+    "primera descripción completa aquí",
+    "segunda descripción completamente diferente aquí", 
+    "tercera descripción con enfoque distinto aquí"
+  ],
+  "category": "categoría aquí",
+  "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
+}
     `;
 
-        // The new SDK syntax might differ, but assuming standardized usage:
-        // client.models.generateContent({ model: 'model-name', contents: ... })
-        const result = await client.models.generateContent({
-            model: GEMINI_MODELS.TEXT,
-            contents: [
-                {
-                    role: 'user',
-                    parts: [{ text: prompt }]
-                }
-            ],
-            config: {
-                responseMimeType: 'application/json'
-            }
-        });
+    const result = await client.models.generateContent({
+      model: GEMINI_MODELS.TEXT,
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config: { responseMimeType: 'application/json' },
+    });
 
-        const text = result.text;
+    const text = result.text;
+    if (!text) throw new Error('No se generó contenido');
 
-        if (!text) {
-            throw new Error('No content generated');
-        }
+    const cleanedText = text.replace(/```json\n?|\n?```/g, '').trim();
+    const data = JSON.parse(cleanedText) as GeneratedEventDetails;
 
-        // Clean up markdown code blocks if present (common in LLM responses)
-        // Even with JSON mode, sometimes it might add wrapping
-        const cleanedText = text.replace(/```json\n?|\n?```/g, '').trim();
-
-        const data = JSON.parse(cleanedText) as GeneratedEventDetails;
-
-        // Validate category
-        if (!EVENT_CATEGORIES.includes(data.category as any)) {
-            data.category = 'otro';
-        }
-
-        // Limit tags to 5
-        data.tags = (data.tags || []).slice(0, 5);
-
-        return { success: true, data };
-    } catch (error) {
-        console.error('Gemini API Error:', error);
-        return { success: false, error: 'Failed to generate content. Please try again.' };
+    if (!EVENT_CATEGORIES.includes(data.category as any)) {
+      data.category = 'otro';
     }
+
+    data.tags = (data.tags || []).slice(0, 5);
+    data.descriptions = (data.descriptions || []).slice(0, 3);
+
+    return { success: true, data };
+  } catch (error) {
+    console.error('Gemini API Error:', error);
+    return { success: false, error: 'Error al generar contenido. Intenta de nuevo.' };
+  }
 }
 
-export async function generateEventPosterAction(prompt: string, eventId?: string): Promise<{ success: boolean; imageUrl?: string; error?: string }> {
-    try {
-        if (!process.env.GEMINI_API_KEY) {
-            throw new Error('GEMINI_API_KEY is not configured');
-        }
-
-        const client = getGeminiClient();
-
-        // Generate image
-        const result = await client.models.generateContent({
-            model: GEMINI_MODELS.IMAGE,
-            contents: [
-                {
-                    role: 'user',
-                    parts: [{ text: `Create a professional, modern, and clean business event poster for: ${prompt}. Style: High-quality photorealistic imagery, elegant typography. Avoid futuristic, sci-fi, or neon aesthetics. 16:9 aspect ratio. Minimal text.` }]
-                }
-            ],
-        });
-
-        // Extract base64
-        // According to context7 docs for gemini-3-pro-image-preview:
-        // response.candidates[0].content.parts[0].inlineData.data
-        const candidates = result.candidates; // Access property directly
-        const part = candidates?.[0]?.content?.parts?.[0];
-
-        let base64Image: string | undefined;
-
-        if (part?.inlineData?.data) {
-            base64Image = part.inlineData.data;
-        } else {
-            console.error('No inlineData in response:', JSON.stringify(part));
-            throw new Error('No image generated');
-        }
-
-        const buffer = Buffer.from(base64Image, 'base64');
-
-        // Upload to storage
-        // If no eventId, generate a temporary one
-        const targetId = eventId || crypto.randomUUID();
-
-        const { uploadPosterToStorage } = await import('@/lib/firebase/storage');
-        const imageUrl = await uploadPosterToStorage(targetId, buffer, 'image/png');
-
-        if (!imageUrl) {
-            throw new Error('Failed to upload image to storage');
-        }
-
-        return { success: true, imageUrl };
-    } catch (error) {
-        console.error('Gemini Image Generation Error:', error);
-        return { success: false, error: 'Failed to generate poster.' };
+export async function generateEventPosterAction(
+  prompt: string,
+  eventId?: string
+): Promise<{ success: boolean; imageUrl?: string; error?: string }> {
+  try {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error('GEMINI_API_KEY no está configurada');
     }
+
+    const client = getGeminiClient();
+
+    const result = await client.models.generateContent({
+      model: GEMINI_MODELS.IMAGE,
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: `Create a professional, modern, and clean business event poster for: ${prompt}. Style: High-quality photorealistic imagery, elegant typography. Avoid futuristic, sci-fi, or neon aesthetics. 16:9 aspect ratio. Minimal text.` }],
+        },
+      ],
+    });
+
+    const candidates = result.candidates;
+    const part = candidates?.[0]?.content?.parts?.[0];
+
+    if (!part?.inlineData?.data) {
+      throw new Error('No se generó imagen');
+    }
+
+    const buffer = Buffer.from(part.inlineData.data, 'base64');
+    const targetId = eventId || crypto.randomUUID();
+
+    const { uploadPosterToStorage } = await import('@/lib/firebase/storage');
+    const imageUrl = await uploadPosterToStorage(targetId, buffer, 'image/png');
+
+    if (!imageUrl) throw new Error('Error al subir imagen');
+
+    return { success: true, imageUrl };
+  } catch (error) {
+    console.error('Gemini Image Error:', error);
+    return { success: false, error: 'Error al generar poster.' };
+  }
 }
